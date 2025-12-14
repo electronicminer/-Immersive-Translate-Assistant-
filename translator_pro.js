@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.15
-// @description 智能划词翻译，原地替换。支持：暴力解除选择限制、Alt+点击自动翻译、iPadOS 风格交互。
+// @version     9.16
+// @description 智能划词翻译，原地替换。支持：Alt+点击自动翻译、iPadOS 风格交互。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -432,21 +432,6 @@
     document.getElementById("sf-cfg-lang").value = config.targetLang;
     document.getElementById("sf-cfg-style").value = config.transStyle;
 
-    // --- ⭐ 新增功能：暴力解除选择限制 ---
-    let unlockStyle = null;
-    function toggleUnlockSelection() {
-        if (unlockStyle) {
-            unlockStyle.remove();
-            unlockStyle = null;
-            showToast("已恢复网站默认选择限制", "info");
-        } else {
-            unlockStyle = document.createElement("style");
-            unlockStyle.innerText = `* { -webkit-user-select: text !important; user-select: text !important; pointer-events: auto !important; }`;
-            document.head.appendChild(unlockStyle);
-            showToast("已强制开启文本选择", "success");
-        }
-    }
-
     // --- 磁吸逻辑 (iPadOS Style) ---
     // 只有当图标显示时才激活磁吸计算
     let iconBaseX = 0;
@@ -538,7 +523,6 @@
     }
 
     GM_registerMenuCommand("⚙️ 打开设置", () => toggleSettings(true));
-    GM_registerMenuCommand("🔓 强制开启复制/选择", toggleUnlockSelection);
 
     document.getElementById("sf-save-btn").onclick = () => {
         const newKey = document.getElementById("sf-cfg-key").value.trim();
