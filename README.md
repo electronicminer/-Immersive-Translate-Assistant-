@@ -66,9 +66,3 @@
 4.  推送到分支 (`git push origin feat/AmazingFeature`)
 5.  提交 Pull Request
 
-## 📄 开源协议 (License)
-
-MIT License © WangPan
-
----
-<p align="center">Made with ❤️ by WangPan</p>
