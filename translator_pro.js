@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.16
-// @description 智能划词翻译，原地替换。支持：Alt+点击自动翻译、iPadOS 风格交互。
+// @version     9.17
+// @description 智能划词翻译，原地替换。支持：Alt+点击自动翻译、iPadOS 风格交互、Alt+T快捷键翻译。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -634,19 +634,9 @@
     });
 
     // --- 核心翻译逻辑 ---
-    smartIcon.onclick = async (e) => {
-        e.stopPropagation();
-        e.preventDefault();
 
-        // 1. 播放退场动画
-        smartIcon.classList.add("sf-pop-out");
-
-        // 2. 稍等片刻让动画播放
-        await new Promise(r => setTimeout(r, 200));
-        smartIcon.style.display = "none";
-        isIconVisible = false;
-        smartIcon.classList.remove("sf-pop-out");
-
+    // 1. 提取出核心执行函数，供图标点击和快捷键共用
+    async function executeTranslation() {
         if (!config.apiKey) return toggleSettings(true);
         if (!selectedRange) return;
 
@@ -666,6 +656,49 @@
         }
 
         doTranslation(selectedText, span);
+    }
+
+    // 2. 快捷键监听：Alt + T
+    document.addEventListener("keydown", (e) => {
+        if (e.altKey && (e.code === "KeyZ" || e.key === "z" || e.key === "Z")) {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const text = selection.toString().trim();
+                if (text) {
+                    e.preventDefault();
+                    // 手动更新当前选中内容，以防没有触发 processSelection
+                    selectedText = text;
+                    selectedRange = selection.getRangeAt(0);
+
+                    // 如果图标正在显示，先隐藏
+                    if (isIconVisible) {
+                        smartIcon.style.display = "none";
+                        isIconVisible = false;
+                    }
+
+                    // 直接执行翻译
+                    executeTranslation();
+                }
+            }
+        }
+    });
+
+    // 3. 图标点击逻辑
+    smartIcon.onclick = async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        // 1. 播放退场动画
+        smartIcon.classList.add("sf-pop-out");
+
+        // 2. 稍等片刻让动画播放
+        await new Promise(r => setTimeout(r, 200));
+        smartIcon.style.display = "none";
+        isIconVisible = false;
+        smartIcon.classList.remove("sf-pop-out");
+
+        // 3. 执行翻译
+        executeTranslation();
     };
 
     function doTranslation(text, spanElement) {
