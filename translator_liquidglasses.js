@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name        沉浸翻译助手
+// @name        沉浸翻译助手 (UI修复版)
 // @namespace   http://tampermonkey.net/
-// @version     9.38
-// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（复刻 Shu Ding 算法）。折射率增强版。
+// @version     9.42
+// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板输入框溢出问题。快捷键调整为 Alt+X。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -74,6 +74,8 @@
         bindMouse() {
              this.moveHandler = (e) => {
                 const rect = this.target.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0 || window.getComputedStyle(this.target).opacity === '0') return;
+
                 this.targetMouse.x = (e.clientX - rect.left) / rect.width;
                 this.targetMouse.y = (e.clientY - rect.top) / rect.height;
                 if(!this.isRendering) {
@@ -269,7 +271,6 @@
         targetLang: GM_getValue("SF_TARGET_LANG", DEFAULTS.TARGET_LANG),
         transStyle: GM_getValue("SF_TRANS_STYLE", DEFAULTS.TRANS_STYLE),
         apiKey: GM_getValue("SF_API_KEY", ""),
-        // --- 新增配置项 ---
         enableIcon: GM_getValue("SF_ENABLE_ICON", true),
         enableTooltip: GM_getValue("SF_ENABLE_TOOLTIP", true)
     };
@@ -314,11 +315,45 @@
             }
         }
 
+        /* --- Manual Panel Styles --- */
+        #sf-manual-panel {
+            position: fixed; top: 50%; left: 50%; width: 500px; max-width: 90vw;
+            border: 1px solid var(--sf-glass-border);
+            color: var(--sf-text-main); padding: 24px; border-radius: 24px;
+            z-index: 2147483647; font-family: var(--sf-font);
+            opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none;
+            transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo);
+            display: flex; flex-direction: column; gap: 16px;
+            box-sizing: border-box !important; /* 修复1：强制容器盒子模型 */
+        }
+        #sf-manual-panel.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+
+        .sf-manual-textarea {
+            width: 100%; min-height: 100px; max-height: 300px; resize: vertical;
+            padding: 16px; border: none; background: var(--sf-input-bg);
+            color: var(--sf-text-main); border-radius: 16px;
+            font-size: 16px; line-height: 1.5; outline: none; transition: all 0.2s;
+            font-family: var(--sf-font);
+            box-sizing: border-box !important; /* 修复2：强制输入框盒子模型，包含padding */
+            margin: 0 !important; /* 修复3：移除可能继承的margin */
+            max-width: 100%;
+        }
+        .sf-manual-textarea:focus { background: var(--sf-input-focus-bg); box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2); }
+        .sf-manual-textarea.sf-output {
+            background: rgba(0,0,0,0.03); cursor: text;
+        }
+
+        .sf-panel-controls { display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
+        .sf-kbd-hint { font-size: 12px; color: var(--sf-text-sub); opacity: 0.7; }
+        .sf-kbd { background: rgba(128,128,128,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+
+
         #sf-smart-icon {
             position: absolute; width: 38px; height: 38px; border-radius: 12px; cursor: pointer; z-index: 2147483647;
             display: none; align-items: center; justify-content: center; border: none; user-select: none;
             transform-origin: center center; transition: opacity 0.2s, transform 0.2s var(--sf-ease-out-expo);
             will-change: transform, left, top;
+            box-sizing: border-box;
         }
         #sf-smart-icon.sf-pop-in { animation: sf-spring-in 0.6s var(--sf-ease-spring) forwards; }
         #sf-smart-icon.sf-pop-out { animation: sf-pop-out 0.25s var(--sf-ease-out-expo) forwards; pointer-events: none; }
@@ -334,24 +369,25 @@
         .sf-translated-node.sf-loading { color: transparent !important; background: var(--sf-shimmer-bg); background-size: 400% 100%; animation: sf-shimmer-wave 1.4s infinite cubic-bezier(0.23, 1, 0.32, 1); border-radius: 6px; pointer-events: none; border: none; }
         .sf-translated-node.sf-error { color: var(--sf-error) !important; border-bottom: 1.5px solid var(--sf-error); background: rgba(255, 59, 48, 0.08); }
 
-        #sf-settings-modal { position: fixed; top: 50%; left: 50%; width: 360px; border: 1px solid var(--sf-glass-border); color: var(--sf-text-main); padding: 24px 28px; border-radius: 20px; z-index: 2147483647; font-family: var(--sf-font); opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none; transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo); -webkit-font-smoothing: antialiased; }
+        #sf-settings-modal { position: fixed; top: 50%; left: 50%; width: 360px; border: 1px solid var(--sf-glass-border); color: var(--sf-text-main); padding: 24px 28px; border-radius: 20px; z-index: 2147483647; font-family: var(--sf-font); opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none; transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo); -webkit-font-smoothing: antialiased; box-sizing: border-box !important; }
         #sf-settings-modal.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
         #sf-settings-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.15); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 2147483646; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
         #sf-settings-overlay.sf-open { opacity: 1; pointer-events: auto; }
-        .sf-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; cursor: grab; }
+        .sf-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; cursor: grab; box-sizing: border-box; }
         .sf-title { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.4px; color: var(--sf-text-main) !important; }
         .sf-greeting { font-size: 13px; color: var(--sf-text-sub); font-weight: 500; margin-top: 2px; }
         .sf-label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: var(--sf-text-sub); letter-spacing: -0.2px; }
-        .sf-input, .sf-select { width: 100%; padding: 12px 14px; border: none; background: var(--sf-input-bg); color: var(--sf-text-main); border-radius: 10px; font-size: 15px; outline: none; transition: all 0.2s; font-family: var(--sf-font); font-weight: 500; }
+        .sf-input, .sf-select { width: 100%; padding: 12px 14px; border: none; background: var(--sf-input-bg); color: var(--sf-text-main); border-radius: 10px; font-size: 15px; outline: none; transition: all 0.2s; font-family: var(--sf-font); font-weight: 500; box-sizing: border-box !important; margin: 0; }
         .sf-input:focus, .sf-select:focus { background: var(--sf-input-focus-bg); box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2); transform: scale(1.01); }
         .sf-select option { background-color: var(--sf-option-bg); }
-        .sf-btn { width: 100%; padding: 12px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 16px; font-family: var(--sf-font); transition: all 0.2s var(--sf-ease-out-expo); position: relative; overflow: hidden; }
+        .sf-btn { width: 100%; padding: 12px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 16px; font-family: var(--sf-font); transition: all 0.2s var(--sf-ease-out-expo); position: relative; overflow: hidden; box-sizing: border-box !important; }
+        .sf-btn-sm { width: auto; padding: 8px 16px; font-size: 14px; border-radius: 8px; }
         .sf-btn-primary { background: var(--sf-primary); color: white; }
         .sf-btn-primary::after { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%); transform: skewX(-25deg); transition: none; }
         .sf-btn-primary:hover::after { animation: sf-shine-pass 0.75s ease-in-out; }
         .sf-btn-primary:hover { opacity: 0.95; transform: scale(1.02); }
         .sf-btn-primary:active { transform: scale(0.96); opacity: 0.9; }
-        .sf-close { cursor: pointer; width: 28px; height: 28px; border-radius: 50%; background: rgba(142, 142, 147, 0.15); color: var(--sf-text-sub); display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.2s; font-weight: bold; }
+        .sf-close { cursor: pointer; width: 28px; height: 28px; border-radius: 50%; background: rgba(142, 142, 147, 0.15); color: var(--sf-text-sub); display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.2s; font-weight: bold; box-sizing: border-box; }
         .sf-close:hover { background: rgba(142, 142, 147, 0.3); color: var(--sf-text-main); transform: rotate(90deg); }
 
         .sf-tooltip {
@@ -367,6 +403,7 @@
             pointer-events: none;
             transition: opacity 0.2s, transform 0.4s var(--sf-ease-spring);
             -webkit-font-smoothing: antialiased;
+            box-sizing: border-box;
         }
         .sf-tooltip.sf-show { opacity: 1; transform: scale(1) translateY(0) !important; pointer-events: auto; }
 
@@ -383,6 +420,7 @@
             background: rgba(255,255,255,0.1); border: none; color: var(--sf-tooltip-text);
             padding: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;
             transition: background 0.2s;
+            box-sizing: border-box;
         }
         .sf-action-btn:hover { background: rgba(255,255,255,0.2); }
         .sf-action-btn:active { background: rgba(255,255,255,0.05); transform: scale(0.96); }
@@ -392,13 +430,14 @@
             font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
             opacity: 0; transform: translateY(-30px) scale(0.9); transition: all 0.5s var(--sf-ease-spring);
             -webkit-font-smoothing: antialiased; z-index: 2147483648;
+            box-sizing: border-box;
         }
         .sf-toast.sf-show { opacity: 1; transform: translateY(0) scale(1); }
         .sf-toast.sf-shake { animation: sf-shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 
         /* --- iOS Toggle Switch Styles --- */
-        .sf-setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-        .sf-switch { position: relative; display: inline-block; width: 50px; height: 30px; }
+        .sf-setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; box-sizing: border-box; }
+        .sf-switch { position: relative; display: inline-block; width: 50px; height: 30px; box-sizing: border-box; }
         .sf-switch input { opacity: 0; width: 0; height: 0; }
         .sf-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(120, 120, 128, 0.16); transition: .4s; border-radius: 34px; }
         .sf-slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.15), 0 3px 1px rgba(0,0,0,0.06); }
@@ -427,7 +466,6 @@
     smartIcon.innerHTML = `<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>`;
     document.body.appendChild(smartIcon);
 
-    // 🔥 高折射率水晶特效 🔥
     new LiquidElementShader(smartIcon, {
         enableMouse: true,
         distortionIntensity: 1.8,
@@ -441,7 +479,6 @@
     tooltip.className = "sf-tooltip";
     document.body.appendChild(tooltip);
 
-    // 🔥 Tooltip Shader: 深色背景 + 高斯模糊 🔥
     new LiquidElementShader(tooltip, {
         sdfParams: { w: 0.3, h: 0.2, r: 0.6 },
         boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.1) inset',
@@ -530,6 +567,34 @@
         sdfParams: { w: 0.48, h: 0.48, r: 0.05 },
         boxShadow: `0 20px 50px -8px rgba(0,0,0,0.2), 0 -6px 20px inset rgba(255, 255, 255, 0.4), 0 2px 15px inset rgba(0,0,0,0.1)`,
         backdropFilter: 'blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)',
+        backgroundColor: 'var(--sf-panel-bg)'
+    });
+
+    // 3. ✨ 新增：手动翻译面板 ✨
+    const manualPanel = document.createElement("div");
+    manualPanel.id = "sf-manual-panel";
+    manualPanel.innerHTML = `
+        <div class="sf-header-row" style="margin-bottom:12px">
+            <h3 class="sf-title" style="font-size:17px">手动翻译</h3>
+            <div class="sf-close" id="sf-manual-close">×</div>
+        </div>
+        <textarea class="sf-manual-textarea" id="sf-manual-input" placeholder="在此输入或粘贴需要翻译的文本..."></textarea>
+        <div class="sf-panel-controls">
+            <span class="sf-kbd-hint">Alt+X 关闭 <span style="margin:0 4px">|</span> Ctrl+Enter 翻译</span>
+            <button class="sf-btn sf-btn-primary sf-btn-sm" id="sf-manual-btn">翻译</button>
+        </div>
+        <textarea class="sf-manual-textarea sf-output" id="sf-manual-output" placeholder="翻译结果..." readonly></textarea>
+        <button class="sf-action-btn" id="sf-manual-copy" style="text-align:center; color:var(--sf-text-sub)">复制结果</button>
+    `;
+    document.body.appendChild(manualPanel);
+
+    // 为手动面板应用同样的 Liquid Shader
+    new LiquidElementShader(manualPanel, {
+        enableMouse: true, // 允许鼠标互动光效
+        distortionIntensity: 1.2, // 稍微降低一点畸变以免影响输入
+        sdfParams: { w: 0.48, h: 0.48, r: 0.06 },
+        boxShadow: `0 20px 60px -8px rgba(0,0,0,0.3), 0 -4px 15px inset rgba(255, 255, 255, 0.5)`,
+        backdropFilter: 'blur(12px) contrast(1.1) brightness(1.1) saturate(1.3)',
         backgroundColor: 'var(--sf-panel-bg)'
     });
 
@@ -640,7 +705,6 @@
                  settingsModal.style.top = "50%";
             }
             document.getElementById("sf-cfg-key").value = config.apiKey;
-            // 同步开关状态到 UI
             document.getElementById("sf-cfg-icon").checked = config.enableIcon;
             document.getElementById("sf-cfg-tooltip").checked = config.enableTooltip;
         } else {
@@ -658,8 +722,6 @@
         config.targetLang = document.getElementById("sf-cfg-lang").value;
         config.transStyle = document.getElementById("sf-cfg-style").value;
         config.model = document.getElementById("sf-cfg-model").value.trim();
-
-        // 保存开关状态
         config.enableIcon = document.getElementById("sf-cfg-icon").checked;
         config.enableTooltip = document.getElementById("sf-cfg-tooltip").checked;
 
@@ -675,14 +737,103 @@
     };
 
     document.querySelector(".sf-close").onclick = () => toggleSettings(false);
-    overlay.onclick = () => toggleSettings(false);
+    overlay.onclick = () => { toggleSettings(false); toggleManualPanel(false); };
+
+    // --- 手动翻译面板逻辑 ---
+    function toggleManualPanel(show) {
+        if (show) {
+            manualPanel.classList.add("sf-open");
+            overlay.classList.add("sf-open");
+            document.getElementById("sf-manual-input").focus();
+            // 尝试读取剪贴板
+             navigator.clipboard.readText().then(text => {
+                 if(text && text.trim().length > 0 && document.getElementById("sf-manual-input").value === "") {
+                     // 可选：自动粘贴？这里为了避免干扰用户，先不自动粘贴，只聚焦
+                 }
+             }).catch(()=>{});
+
+        } else {
+            manualPanel.classList.remove("sf-open");
+            overlay.classList.remove("sf-open");
+        }
+    }
+
+    document.getElementById("sf-manual-close").onclick = () => toggleManualPanel(false);
+
+    document.getElementById("sf-manual-btn").onclick = () => {
+        const text = document.getElementById("sf-manual-input").value.trim();
+        if(!text) return showToast("请输入内容", "error");
+        handleManualTranslation(text);
+    };
+
+    document.getElementById("sf-manual-input").addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'Enter') {
+            const text = document.getElementById("sf-manual-input").value.trim();
+            if(text) handleManualTranslation(text);
+        }
+    });
+
+    document.getElementById("sf-manual-copy").onclick = () => {
+        const res = document.getElementById("sf-manual-output").value;
+        if(res) {
+            GM_setClipboard(res);
+            showToast("结果已复制", "copy");
+        }
+    };
+
+    function handleManualTranslation(text) {
+        if (!config.apiKey) return toggleSettings(true);
+        const outputArea = document.getElementById("sf-manual-output");
+        outputArea.value = "正在思考中...";
+        outputArea.style.opacity = "0.7";
+
+        const styleInstruction = PROMPT_STYLES[config.transStyle] || PROMPT_STYLES.daily;
+
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: DEFAULTS.API_URL,
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${config.apiKey}`
+            },
+            data: JSON.stringify({
+                model: config.model,
+                messages: [
+                    { role: "system", content: `You are a translator. Target: ${config.targetLang}. Style: ${styleInstruction}. Rule: Output ONLY the translated text. No markdown.` },
+                    { role: "user", content: text }
+                ],
+                stream: false,
+                max_tokens: 2048,
+                temperature: 0.7
+            }),
+            onload: function(res) {
+                outputArea.style.opacity = "1";
+                if (res.status === 200) {
+                    try {
+                        const data = JSON.parse(res.responseText);
+                        let result = data.choices[0].message.content.trim();
+                        outputArea.value = result;
+                    } catch (e) {
+                        outputArea.value = "解析错误";
+                    }
+                } else {
+                    outputArea.value = `Error ${res.status}`;
+                }
+            },
+            onerror: () => {
+                 outputArea.style.opacity = "1";
+                 outputArea.value = "网络错误";
+            }
+        });
+    }
+
 
     // --- 选词与图标逻辑 ---
     let selectedRange = null;
     let selectedText = "";
 
     document.addEventListener("click", (e) => {
-        if (e.altKey && !isDragging && !settingsModal.contains(e.target)) {
+        if (e.altKey && !isDragging && !settingsModal.contains(e.target) && !manualPanel.contains(e.target)) {
             const target = e.target;
             if (target.innerText && target.innerText.trim().length > 0) {
                 e.preventDefault();
@@ -699,7 +850,6 @@
     });
 
     function processSelection(selection) {
-        // 如果禁用了图标，直接不显示
         if (!config.enableIcon) return;
 
         const text = selection.toString().trim();
@@ -729,6 +879,7 @@
     document.addEventListener("mouseup", (e) => {
         if (isDragging) return;
         if (tooltip.contains(e.target)) return;
+        if (manualPanel.contains(e.target)) return; // 忽略手动面板内的点击
         if (smartIcon.contains(e.target) || settingsModal.contains(e.target)) return;
         if (e.altKey) return;
         setTimeout(() => {
@@ -746,6 +897,7 @@
 
     document.addEventListener("mousedown", (e) => {
         if (tooltip.contains(e.target)) return;
+        if (manualPanel.contains(e.target)) return; // 忽略手动面板
         if (!smartIcon.contains(e.target) && !settingsModal.contains(e.target)) {
             setTimeout(() => {
                 if (!window.getSelection().toString().trim()) {
@@ -780,6 +932,7 @@
     }
 
     document.addEventListener("keydown", (e) => {
+        // Alt + Z 划词翻译
         if (e.altKey && (e.code === "KeyZ" || e.key === "z" || e.key === "Z")) {
             const selection = window.getSelection();
             if (selection.rangeCount > 0) {
@@ -795,6 +948,13 @@
                     executeTranslation();
                 }
             }
+        }
+        // Alt + S 呼出手动面板
+        // 修改为 Alt + X
+        if (e.altKey && (e.code === "KeyX" || e.key === "x" || e.key === "X")) {
+            e.preventDefault();
+            const isOpen = manualPanel.classList.contains("sf-open");
+            toggleManualPanel(!isOpen);
         }
     });
 
@@ -853,7 +1013,6 @@
         span.setAttribute("data-state", "translated");
 
         span.onmouseenter = (e) => {
-            // 如果开启了 Tooltip 且状态为已翻译，则显示
             if (config.enableTooltip && span.getAttribute("data-state") === "translated") {
                 showTooltip(e, span.getAttribute("data-original"), text);
             }
