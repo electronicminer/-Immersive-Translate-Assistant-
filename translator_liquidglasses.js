@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name        沉浸翻译助手 (Liquid Glass Edition - Performance Optimized)
+// @name        沉浸翻译助手 (Liquid Glass Edition )
 // @namespace   http://tampermonkey.net/
-// @version     9.30
-// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（图标 & 设置面板 & 提示框）。
+// @version     9.36
+// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（复刻 Shu Ding 算法）。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
 
-    // --- 🌊 Liquid Glass 核心算法 ---
+    // --- 🌊 Liquid Glass 核心算法 (复刻 Shu Ding) ---
     const LiquidCore = {
         smoothStep: function(a, b, t) {
             t = Math.max(0, Math.min(1, (t - a) / (b - a)));
@@ -31,96 +31,84 @@
             const qy = Math.abs(y) - height + radius;
             return Math.min(Math.max(qx, qy), 0) + this.length(Math.max(qx, 0), Math.max(qy, 0)) - radius;
         },
-        texture: function(x, y) {
-            return { type: 't', x, y };
-        },
         generateId: function() {
             return 'liquid-glass-' + Math.random().toString(36).substr(2, 9);
         }
     };
 
-    // --- Shader 控制器 (高性能版 & 支持销毁) ---
+    // --- Shader 控制器 (精确算法版) ---
     class LiquidElementShader {
         constructor(targetElement, options = {}) {
             this.target = targetElement;
-            this.resolutionScale = options.resolutionScale || 0.1;
-            this.intensity = options.intensity || 20;
+            this.resolutionScale = options.resolutionScale || 1.0;
 
             this.width = options.width || 100;
             this.height = options.height || 100;
 
-            this.canvasW = Math.ceil(this.width * this.resolutionScale);
-            this.canvasH = Math.ceil(this.height * this.resolutionScale);
-
-            this.sdfParams = options.sdfParams || { w: 0.35, h: 0.35, r: 0.2 };
+            this.sdfParams = options.sdfParams || { w: 0.3, h: 0.2, r: 0.6 };
             this.boxShadow = options.boxShadow || '';
             this.backdropFilter = options.backdropFilter || '';
-            this.backgroundColor = options.backgroundColor || 'rgba(255, 255, 255, 0.01)';
+            this.backgroundColor = options.backgroundColor || 'transparent';
 
             this.id = LiquidCore.generateId();
 
-            this.mouse = { x: 0.5, y: 0.5 };
-            this.targetMouse = { x: 0.5, y: 0.5 };
             this.isRendering = false;
-            this.isVisible = false;
+            this.isVisible = true;
 
             this.initSVG();
             this.initCanvas();
             this.applyStyles();
 
-            // 绑定事件并保存引用以便销毁
-            this.moveHandler = (e) => this.handleMove(e);
-            document.addEventListener('mousemove', this.moveHandler);
-
-            this.startLoop();
+            if (options.enableMouse) {
+                this.mouse = { x: 0.5, y: 0.5 };
+                this.targetMouse = { x: 0.5, y: 0.5 };
+                this.bindMouse();
+                this.startLoop();
+            } else {
+                this.mouse = { x: 0.5, y: 0.5 };
+                setTimeout(() => this.updateShader(), 10);
+            }
         }
 
-        handleMove(e) {
-            if (this.target.offsetParent === null) {
-                this.isVisible = false;
-                return;
-            }
-            this.isVisible = true;
-
-            const rect = this.target.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-
-            this.targetMouse.x = 0.5 + (e.clientX - cx) / 500;
-            this.targetMouse.y = 0.5 + (e.clientY - cy) / 500;
-
-            if (!this.isRendering) {
-                this.isRendering = true;
-                this.startLoop();
-            }
+        bindMouse() {
+             this.moveHandler = (e) => {
+                const rect = this.target.getBoundingClientRect();
+                this.targetMouse.x = (e.clientX - rect.left) / rect.width;
+                this.targetMouse.y = (e.clientY - rect.top) / rect.height;
+                if(!this.isRendering) {
+                    this.isRendering = true;
+                    this.startLoop();
+                }
+             };
+             document.addEventListener('mousemove', this.moveHandler);
         }
 
         initSVG() {
             this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            this.svg.setAttribute('width', '0');
-            this.svg.setAttribute('height', '0');
-            this.svg.style.cssText = 'position: fixed; top: 0; left: 0; pointer-events: none; z-index: -1;';
+            this.svg.style.cssText = 'position: fixed; top: 0; left: 0; pointer-events: none; z-index: -1; width:0; height:0;';
 
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
             filter.setAttribute('id', `${this.id}_filter`);
+
             filter.setAttribute('filterUnits', 'objectBoundingBox');
-            filter.setAttribute('x', '0%');
-            filter.setAttribute('y', '0%');
-            filter.setAttribute('width', '100%');
-            filter.setAttribute('height', '100%');
+            filter.setAttribute('x', '-20%');
+            filter.setAttribute('y', '-20%');
+            filter.setAttribute('width', '140%');
+            filter.setAttribute('height', '140%');
+            filter.setAttribute('colorInterpolationFilters', 'sRGB');
 
             this.feImage = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
             this.feImage.setAttribute('id', `${this.id}_map`);
-            this.feImage.setAttribute('width', '100%');
-            this.feImage.setAttribute('height', '100%');
+            this.feImage.setAttribute('result', 'map');
             this.feImage.setAttribute('preserveAspectRatio', 'none');
 
             this.feDisplacementMap = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
             this.feDisplacementMap.setAttribute('in', 'SourceGraphic');
-            this.feDisplacementMap.setAttribute('in2', `${this.id}_map`);
+            this.feDisplacementMap.setAttribute('in2', 'map');
             this.feDisplacementMap.setAttribute('xChannelSelector', 'R');
             this.feDisplacementMap.setAttribute('yChannelSelector', 'G');
+            this.feDisplacementMap.setAttribute('scale', '0');
 
             filter.appendChild(this.feImage);
             filter.appendChild(this.feDisplacementMap);
@@ -131,21 +119,19 @@
 
         initCanvas() {
             this.canvas = document.createElement('canvas');
-            this.canvas.width = this.canvasW;
-            this.canvas.height = this.canvasH;
+            this.canvas.width = this.width * this.resolutionScale;
+            this.canvas.height = this.height * this.resolutionScale;
             this.context = this.canvas.getContext('2d', { willReadFrequently: true });
         }
 
         applyStyles() {
             this.target.style.background = this.backgroundColor;
-            this.target.style.backdropFilter = this.backdropFilter ?
-                `url(#${this.id}_filter) ${this.backdropFilter}` :
-                `url(#${this.id}_filter) blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)`;
-            this.target.style.boxShadow = this.boxShadow || `0 4px 8px rgba(0, 0, 0, 0.15), 0 -6px 15px inset rgba(255, 255, 255, 0.4), 0 2px 10px inset rgba(0,0,0,0.1)`;
-            this.target.style.overflow = 'hidden';
+            this.target.style.backdropFilter = `url(#${this.id}_filter) ${this.backdropFilter}`;
+            this.target.style.webkitBackdropFilter = this.target.style.backdropFilter;
+            this.target.style.boxShadow = this.boxShadow;
         }
 
-        fragment(uv, mouse) {
+        fragment(uv) {
             const ix = uv.x - 0.5;
             const iy = uv.y - 0.5;
 
@@ -155,41 +141,44 @@
                 this.sdfParams.r
             );
 
-            const mx = mouse.x - 0.5;
-            const my = mouse.y - 0.5;
-
-            const distMouse = Math.hypot(uv.x - mouse.x, uv.y - mouse.y);
-            const mouseInteraction = Math.max(0, 1 - distMouse * 2) * 0.1;
-
-            const displacement = LiquidCore.smoothStep(0.8, 0, distanceToEdge - 0.15 + mouseInteraction);
+            const displacement = LiquidCore.smoothStep(0.8, 0, distanceToEdge - 0.15);
             const scaled = LiquidCore.smoothStep(0, 1, displacement);
 
             return {
-                x: ix * scaled + 0.5 + mx * 0.05,
-                y: iy * scaled + 0.5 + my * 0.05
+                x: ix * scaled + 0.5,
+                y: iy * scaled + 0.5
             };
         }
 
         updateShader() {
-            if (this.destroyed) return; // 防止销毁后调用
+            if (this.destroyed) return;
 
-            const w = this.canvasW;
-            const h = this.canvasH;
-            if (!this.imgData) this.imgData = this.context.createImageData(w, h);
-            const data = this.imgData.data;
+            const rect = this.target.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+
+            this.width = rect.width;
+            this.height = rect.height;
+
+            const w = Math.floor(this.width * this.resolutionScale);
+            const h = Math.floor(this.height * this.resolutionScale);
+
+            if (this.canvas.width !== w || this.canvas.height !== h) {
+                this.canvas.width = w;
+                this.canvas.height = h;
+            }
+
+            const imgData = this.context.createImageData(w, h);
+            const data = imgData.data;
 
             let maxScale = 0;
-            const wInv = 1.0 / w;
-            const hInv = 1.0 / h;
-
-            if (!this.rawValues) this.rawValues = new Float32Array(w * h * 2);
-            let rawIdx = 0;
+            const rawValues = new Float32Array(w * h * 2);
+            let rawPtr = 0;
 
             for (let y = 0; y < h; y++) {
-                const uvY = y * hInv;
+                const uvY = y / h;
                 for (let x = 0; x < w; x++) {
-                    const uv = { x: x * wInv, y: uvY };
-                    const pos = this.fragment(uv, this.mouse);
+                    const uvX = x / w;
+                    const pos = this.fragment({ x: uvX, y: uvY });
 
                     const dx = pos.x * w - x;
                     const dy = pos.y * h - y;
@@ -199,49 +188,41 @@
                     if (absDx > maxScale) maxScale = absDx;
                     if (absDy > maxScale) maxScale = absDy;
 
-                    this.rawValues[rawIdx++] = dx;
-                    this.rawValues[rawIdx++] = dy;
+                    rawValues[rawPtr++] = dx;
+                    rawValues[rawPtr++] = dy;
                 }
             }
 
-            maxScale = maxScale || 1;
             maxScale *= 0.5;
+            if (maxScale < 0.001) maxScale = 0.001;
+
             const scaleInv = 1.0 / maxScale;
 
-            let dataIdx = 0;
-            rawIdx = 0;
+            rawPtr = 0;
+            let dataPtr = 0;
             const len = w * h;
 
             for (let i = 0; i < len; i++) {
-                const r = this.rawValues[rawIdx++] * scaleInv + 0.5;
-                const g = this.rawValues[rawIdx++] * scaleInv + 0.5;
-
-                data[dataIdx++] = (r * 255) | 0;
-                data[dataIdx++] = (g * 255) | 0;
-                data[dataIdx++] = 0;
-                data[dataIdx++] = 255;
+                const r = (rawValues[rawPtr++] * scaleInv + 0.5) * 255;
+                const g = (rawValues[rawPtr++] * scaleInv + 0.5) * 255;
+                data[dataPtr++] = r;
+                data[dataPtr++] = g;
+                data[dataPtr++] = 0;
+                data[dataPtr++] = 255;
             }
 
-            this.context.putImageData(this.imgData, 0, 0);
+            this.context.putImageData(imgData, 0, 0);
+
             const dataURL = this.canvas.toDataURL();
             this.feImage.setAttributeNS('http://www.w3.org/1999/xlink', 'href', dataURL);
-
-            const finalScale = (maxScale / this.resolutionScale * this.intensity);
-            this.feDisplacementMap.setAttribute('scale', finalScale.toString());
+            this.feDisplacementMap.setAttribute('scale', (maxScale / this.resolutionScale).toString());
         }
 
         startLoop() {
-            const animate = () => {
+             const animate = () => {
                 if (this.destroyed) return;
-
-                if (!this.isVisible) {
-                    this.isRendering = false;
-                    return;
-                }
-
                 const dx = this.targetMouse.x - this.mouse.x;
                 const dy = this.targetMouse.y - this.mouse.y;
-
                 this.mouse.x += dx * 0.1;
                 this.mouse.y += dy * 0.1;
 
@@ -249,26 +230,19 @@
                     this.isRendering = false;
                     return;
                 }
-
-                this.updateShader();
                 requestAnimationFrame(animate);
-            };
-            requestAnimationFrame(animate);
+             };
+             requestAnimationFrame(animate);
         }
 
-        // 新增：资源清理方法
         destroy() {
             this.destroyed = true;
-            document.removeEventListener('mousemove', this.moveHandler);
-            if (this.svg && this.svg.parentNode) {
-                this.svg.remove();
-            }
+            if(this.moveHandler) document.removeEventListener('mousemove', this.moveHandler);
+            if (this.svg && this.svg.parentNode) this.svg.remove();
             this.svg = null;
             this.canvas = null;
-            this.context = null;
         }
     }
-
 
     // --- ⚙️ 配置中心 ---
     const DEFAULTS = {
@@ -282,7 +256,6 @@
         REQUEST_INTERVAL: 350
     };
 
-    // --- 📝 提示词模板库 ---
     const PROMPT_STYLES = {
         daily: "Translate accurately and idiomatically. Use natural, everyday language. Maintain the tone of the original text.",
         academic: "Translate using formal academic language. Ensure technical terminology is accurate and precise. Maintain a professional, objective tone. Avoid colloquialisms.",
@@ -298,46 +271,40 @@
 
     // --- 🎨 样式注入 (CSS) ---
     const styles = `
-        /* --- CSS 变量系统 --- */
         :root {
             --sf-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             --sf-primary: #007AFF;
             --sf-primary-hover: #0062cc;
             --sf-success: #34C759;
             --sf-error: #FF3B30;
-
-            /* 物理曲线 */
             --sf-ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
             --sf-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-            /* Light Mode */
-            --sf-glass-border: rgba(0, 0, 0, 0.12);
+            --sf-glass-border: rgba(255, 255, 255, 0.1);
             --sf-panel-bg: rgba(255, 255, 255, 0.75);
-
             --sf-text-main: #1d1d1f;
             --sf-text-sub: #555555;
-
             --sf-input-bg: rgba(118, 118, 128, 0.12);
             --sf-input-focus-bg: rgba(255, 255, 255, 1);
             --sf-icon-bg: rgba(255, 255, 255, 0.95);
-            /* Tooltip 样式重置，完全交由 JS Shader 接管背景 */
-            --sf-tooltip-text: #1d1d1f;
+
+            /* Tooltip 专用颜色：强制深色模式 */
+            --sf-tooltip-text: #ffffff;
+            --sf-tooltip-sub: rgba(255, 255, 255, 0.6);
+            --sf-tooltip-bg-dark: rgba(20, 20, 20, 0.75);
+
             --sf-option-bg: #ffffff;
             --sf-shimmer-bg: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.12) 37%, rgba(0,0,0,0.06) 63%);
         }
 
         @media (prefers-color-scheme: dark) {
             :root {
-                /* Dark Mode */
-                --sf-glass-border: rgba(255, 255, 255, 0.12);
                 --sf-panel-bg: rgba(30, 30, 30, 0.7);
-
                 --sf-text-main: #ffffff;
                 --sf-text-sub: #ebebf5;
                 --sf-input-bg: rgba(118, 118, 128, 0.24);
                 --sf-input-focus-bg: rgba(0, 0, 0, 0.3);
                 --sf-icon-bg: rgba(44, 44, 46, 0.95);
-                --sf-tooltip-text: #ffffff;
                 --sf-option-bg: #2c2c2e;
                 --sf-shimmer-bg: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.18) 37%, rgba(255,255,255,0.1) 63%);
             }
@@ -345,170 +312,55 @@
 
         /* --- 1. 智能跟随图标 --- */
         #sf-smart-icon {
-            position: absolute;
-            width: 38px; height: 38px;
-            border-radius: 12px;
-            cursor: pointer;
-            z-index: 2147483647;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            border: none;
-            user-select: none;
-            transform-origin: center center;
-            transition: opacity 0.2s, transform 0.2s var(--sf-ease-out-expo);
+            position: absolute; width: 38px; height: 38px; border-radius: 12px; cursor: pointer; z-index: 2147483647;
+            display: none; align-items: center; justify-content: center; border: none; user-select: none;
+            transform-origin: center center; transition: opacity 0.2s, transform 0.2s var(--sf-ease-out-expo);
             will-change: transform, left, top;
         }
-
-        #sf-smart-icon.sf-pop-in {
-            animation: sf-spring-in 0.6s var(--sf-ease-spring) forwards;
-        }
-
-        #sf-smart-icon.sf-pop-out {
-            animation: sf-pop-out 0.25s var(--sf-ease-out-expo) forwards;
-            pointer-events: none;
-        }
-
-        #sf-smart-icon svg {
-            stroke: var(--sf-primary); fill: none; width: 20px; height: 20px;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
-            z-index: 2;
-        }
-
-        #sf-smart-icon.sf-pop-in svg path {
-            stroke-dasharray: 20;
-            stroke-dashoffset: 20;
-            animation: sf-draw-stroke 0.8s ease-out forwards;
-        }
-
+        #sf-smart-icon.sf-pop-in { animation: sf-spring-in 0.6s var(--sf-ease-spring) forwards; }
+        #sf-smart-icon.sf-pop-out { animation: sf-pop-out 0.25s var(--sf-ease-out-expo) forwards; pointer-events: none; }
+        #sf-smart-icon svg { stroke: var(--sf-primary); fill: none; width: 20px; height: 20px; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1)); z-index: 2; }
+        #sf-smart-icon.sf-pop-in svg path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: sf-draw-stroke 0.8s ease-out forwards; }
         #sf-smart-icon:active { transform: scale(0.92) !important; }
 
         /* --- 2. 翻译结果 --- */
-        .sf-translated-node {
-            background-color: transparent;
-            border-bottom: 1.5px dashed var(--sf-primary);
-            cursor: pointer;
-            border-radius: 4px;
-            padding: 0 2px;
-            display: inline;
-            transition: all 0.2s;
-            position: relative;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        .sf-translated-node[data-state="translated"] {
-            animation: sf-type-settle 0.7s var(--sf-ease-out-expo) forwards, sf-highlight-flash 1s ease-out;
-        }
-
+        .sf-translated-node { background-color: transparent; border-bottom: 1.5px dashed var(--sf-primary); cursor: pointer; border-radius: 4px; padding: 0 2px; display: inline; transition: all 0.2s; position: relative; -webkit-font-smoothing: antialiased; }
+        .sf-translated-node[data-state="translated"] { animation: sf-type-settle 0.7s var(--sf-ease-out-expo) forwards, sf-highlight-flash 1s ease-out; }
         .sf-translated-node.sf-switching { opacity: 0; transform: scale(0.96) blur(2px); }
         .sf-translated-node:hover { background-color: rgba(0, 122, 255, 0.1); border-bottom-style: solid; }
-
-        /* ⚠️ 关键修改：彻底移除“退回原文”状态的特殊样式，使其看起来和普通文本一致 */
-        .sf-translated-node.sf-show-original {
-            border-bottom: none !important;
-            filter: none !important;
-            color: inherit !important;
-            background: transparent !important;
-        }
-
-        .sf-translated-node.sf-loading {
-            color: transparent !important;
-            background: var(--sf-shimmer-bg);
-            background-size: 400% 100%;
-            animation: sf-shimmer-wave 1.4s infinite cubic-bezier(0.23, 1, 0.32, 1);
-            border-radius: 6px;
-            pointer-events: none;
-            border: none;
-        }
-
-        .sf-translated-node.sf-error {
-            color: var(--sf-error) !important;
-            border-bottom: 1.5px solid var(--sf-error);
-            background: rgba(255, 59, 48, 0.08);
-        }
+        .sf-translated-node.sf-show-original { border-bottom: none !important; filter: none !important; color: inherit !important; background: transparent !important; }
+        .sf-translated-node.sf-loading { color: transparent !important; background: var(--sf-shimmer-bg); background-size: 400% 100%; animation: sf-shimmer-wave 1.4s infinite cubic-bezier(0.23, 1, 0.32, 1); border-radius: 6px; pointer-events: none; border: none; }
+        .sf-translated-node.sf-error { color: var(--sf-error) !important; border-bottom: 1.5px solid var(--sf-error); background: rgba(255, 59, 48, 0.08); }
 
         /* --- 设置面板 --- */
-        #sf-settings-modal {
-            position: fixed; top: 50%; left: 50%;
-            width: 360px;
-            border: 1px solid var(--sf-glass-border);
-            color: var(--sf-text-main);
-            padding: 24px 28px;
-            border-radius: 20px;
-            z-index: 2147483647;
-            font-family: var(--sf-font);
-            opacity: 0;
-            transform: translate(-50%, -45%) scale(0.96);
-            pointer-events: none;
-            transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo);
-            -webkit-font-smoothing: antialiased;
-        }
+        #sf-settings-modal { position: fixed; top: 50%; left: 50%; width: 360px; border: 1px solid var(--sf-glass-border); color: var(--sf-text-main); padding: 24px 28px; border-radius: 20px; z-index: 2147483647; font-family: var(--sf-font); opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none; transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo); -webkit-font-smoothing: antialiased; }
         #sf-settings-modal.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
-
-        #sf-settings-overlay {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.15);
-            backdrop-filter: blur(3px);
-            -webkit-backdrop-filter: blur(3px);
-            z-index: 2147483646;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.4s ease;
-        }
+        #sf-settings-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.15); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 2147483646; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
         #sf-settings-overlay.sf-open { opacity: 1; pointer-events: auto; }
-
         .sf-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; cursor: grab; }
         .sf-title { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.4px; color: var(--sf-text-main) !important; }
         .sf-greeting { font-size: 13px; color: var(--sf-text-sub); font-weight: 500; margin-top: 2px; }
         .sf-label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: var(--sf-text-sub); letter-spacing: -0.2px; }
-
-        .sf-input, .sf-select {
-            width: 100%; padding: 12px 14px; border: none;
-            background: var(--sf-input-bg); color: var(--sf-text-main);
-            border-radius: 10px; font-size: 15px; outline: none;
-            transition: all 0.2s; font-family: var(--sf-font);
-            font-weight: 500;
-        }
-        .sf-input:focus, .sf-select:focus {
-            background: var(--sf-input-focus-bg);
-            box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
-            transform: scale(1.01);
-        }
+        .sf-input, .sf-select { width: 100%; padding: 12px 14px; border: none; background: var(--sf-input-bg); color: var(--sf-text-main); border-radius: 10px; font-size: 15px; outline: none; transition: all 0.2s; font-family: var(--sf-font); font-weight: 500; }
+        .sf-input:focus, .sf-select:focus { background: var(--sf-input-focus-bg); box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2); transform: scale(1.01); }
         .sf-select option { background-color: var(--sf-option-bg); }
-
-        .sf-btn {
-            width: 100%; padding: 12px; border: none; border-radius: 12px;
-            cursor: pointer; font-weight: 600; font-size: 16px; font-family: var(--sf-font);
-            transition: all 0.2s var(--sf-ease-out-expo);
-            position: relative; overflow: hidden;
-        }
+        .sf-btn { width: 100%; padding: 12px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 16px; font-family: var(--sf-font); transition: all 0.2s var(--sf-ease-out-expo); position: relative; overflow: hidden; }
         .sf-btn-primary { background: var(--sf-primary); color: white; }
-        .sf-btn-primary::after {
-            content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
-            background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%);
-            transform: skewX(-25deg); transition: none;
-        }
+        .sf-btn-primary::after { content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%; background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%); transform: skewX(-25deg); transition: none; }
         .sf-btn-primary:hover::after { animation: sf-shine-pass 0.75s ease-in-out; }
         .sf-btn-primary:hover { opacity: 0.95; transform: scale(1.02); }
         .sf-btn-primary:active { transform: scale(0.96); opacity: 0.9; }
-
-        .sf-close {
-            cursor: pointer; width: 28px; height: 28px; border-radius: 50%;
-            background: rgba(142, 142, 147, 0.15); color: var(--sf-text-sub);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 16px; transition: all 0.2s; font-weight: bold;
-        }
+        .sf-close { cursor: pointer; width: 28px; height: 28px; border-radius: 50%; background: rgba(142, 142, 147, 0.15); color: var(--sf-text-sub); display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.2s; font-weight: bold; }
         .sf-close:hover { background: rgba(142, 142, 147, 0.3); color: var(--sf-text-main); transform: rotate(90deg); }
 
-        /* --- Tooltip (去除背景，由 Shader 接管) --- */
+        /* --- Tooltip --- */
         .sf-tooltip {
             position: fixed;
-            /* background, backdrop-filter, box-shadow 都由 JS 设置 */
-            border: 1px solid var(--sf-glass-border); /* 保留深色边框 */
-            color: var(--sf-tooltip-text); padding: 12px 16px; border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.15);
+            /* ⚠️ 文字颜色调整为白色，增强在深色磨砂背景上的可读性 */
+            color: var(--sf-tooltip-text);
+            padding: 12px 16px;
+            border-radius: 24px;
             font-size: 13px; line-height: 1.5; max-width: 300px;
             z-index: 2147483647;
             font-family: var(--sf-font);
@@ -521,42 +373,34 @@
 
         .sf-tooltip-arrow {
             position: absolute; width: 12px; height: 12px;
-            background: var(--sf-panel-bg); /* 与面板背景一致 */
+            /* ⚠️ 箭头颜色必须匹配深色背景 */
+            background: var(--sf-tooltip-bg-dark);
             transform: rotate(45deg); border-radius: 2px;
         }
-        .sf-tooltip.sf-top .sf-tooltip-arrow { bottom: -6px; left: 16px; border-bottom: 1px solid var(--sf-glass-border); border-right: 1px solid var(--sf-glass-border); }
-        .sf-tooltip.sf-bottom .sf-tooltip-arrow { top: -6px; left: 16px; border-top: 1px solid var(--sf-glass-border); border-left: 1px solid var(--sf-glass-border); }
+        .sf-tooltip.sf-top .sf-tooltip-arrow { bottom: -6px; left: 16px; border-bottom: 1px solid rgba(255,255,255,0.15); border-right: 1px solid rgba(255,255,255,0.15); }
+        .sf-tooltip.sf-bottom .sf-tooltip-arrow { top: -6px; left: 16px; border-top: 1px solid rgba(255,255,255,0.15); border-left: 1px solid rgba(255,255,255,0.15); }
 
         .sf-action-btn {
             margin-top: 8px; width: 100%;
-            background: rgba(128,128,128,0.15); border: none; color: var(--sf-tooltip-text);
+            background: rgba(255,255,255,0.1); border: none; color: var(--sf-tooltip-text);
             padding: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;
             transition: background 0.2s;
         }
-        .sf-action-btn:hover { background: rgba(128,128,128,0.25); }
-        .sf-action-btn:active { background: rgba(128,128,128,0.1); transform: scale(0.96); }
+        .sf-action-btn:hover { background: rgba(255,255,255,0.2); }
+        .sf-action-btn:active { background: rgba(255,255,255,0.05); transform: scale(0.96); }
 
-        /* --- Toast 通知 (去除背景，由 Shader 接管) --- */
+        /* --- Toast 通知 --- */
         .sf-toast {
-            /* background/backdrop 由 JS 设置 */
-            border: 1px solid var(--sf-glass-border);
-            color: #1d1d1f;
-            padding: 12px 24px; border-radius: 50px; /* ⚠️ 修改：增加圆角以匹配 Shader 的胶囊形状 */
-            font-size: 14px; font-weight: 500;
-            display: flex; align-items: center; gap: 10px;
-            opacity: 0; transform: translateY(-30px) scale(0.9);
-            transition: all 0.5s var(--sf-ease-spring);
-            -webkit-font-smoothing: antialiased;
+            border: 1px solid var(--sf-glass-border); color: #1d1d1f; padding: 12px 28px; border-radius: 50px;
+            font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
+            opacity: 0; transform: translateY(-30px) scale(0.9); transition: all 0.5s var(--sf-ease-spring);
+            -webkit-font-smoothing: antialiased; z-index: 2147483648;
         }
         .sf-toast.sf-show { opacity: 1; transform: translateY(0) scale(1); }
         .sf-toast.sf-shake { animation: sf-shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 
-
-        /* --- 动画关键帧 --- */
-        @keyframes sf-draw-stroke {
-            from { stroke-dashoffset: 20; }
-            to { stroke-dashoffset: 0; }
-        }
+        /* 动画关键帧 */
+        @keyframes sf-draw-stroke { from { stroke-dashoffset: 20; } to { stroke-dashoffset: 0; } }
         @keyframes sf-spring-in { 0% { opacity: 0; transform: scale(0.3); } 50% { transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
         @keyframes sf-pop-out { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.5); } }
         @keyframes sf-type-settle { 0% { opacity: 0; filter: blur(6px); transform: translateY(3px) scale(0.98); letter-spacing: -0.3px; } 100% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); letter-spacing: 0; } }
@@ -578,33 +422,27 @@
     smartIcon.innerHTML = `<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>`;
     document.body.appendChild(smartIcon);
 
-    // 🔥 图标 Shader (参数复刻参考代码) 🔥
     new LiquidElementShader(smartIcon, {
-        width: 38,
-        height: 38,
-        resolutionScale: 1.0,
-        intensity: 1,
+        enableMouse: true,
         sdfParams: { w: 0.3, h: 0.3, r: 0.6 },
         boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
         backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)',
-        backgroundColor: 'rgba(255, 255, 255, 0.01)' // 图标保持全透
+        backgroundColor: 'rgba(255, 255, 255, 0.01)'
     });
 
     const tooltip = document.createElement("div");
     tooltip.className = "sf-tooltip";
     document.body.appendChild(tooltip);
 
-    // 🔥 Tooltip Shader (应用参考参数 + 优化背景) 🔥
+    // 🔥 Tooltip Shader: 深色背景 + 高斯模糊 🔥
     new LiquidElementShader(tooltip, {
-        width: 300, // 估算尺寸
-        height: 150,
-        resolutionScale: 0.5, // 性能平衡
-        intensity: 1,
-        // 调整形状参数以适应矩形气泡：宽一点，圆角稍小
         sdfParams: { w: 0.3, h: 0.2, r: 0.6 },
-        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
-        backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)',
-        backgroundColor: 'var(--sf-panel-bg)' // 使用乳白背景保证文字可读
+        // 深色投影增加层次感
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.1) inset',
+        // ⚠️ 关键调整：blur 增加到 10px 确保可读，降低 brightness 模拟深色玻璃
+        backdropFilter: 'blur(0px) contrast(1.0) brightness(0.8) saturate(1.1)',
+        // ⚠️ 关键调整：深色半透明背景
+        backgroundColor: 'var(--sf-tooltip-bg-dark)'
     });
 
     const toastContainer = document.createElement("div");
@@ -627,12 +465,10 @@
             </div>
             <div class="sf-close">×</div>
         </div>
-
         <div style="margin-bottom: 20px;">
             <label class="sf-label">SiliconFlow API Key</label>
             <input type="password" id="sf-cfg-key" class="sf-input" placeholder="sk-..." value="${config.apiKey}">
         </div>
-
         <div style="display:flex; gap:12px; margin-bottom: 20px;">
             <div style="flex:1;">
                 <label class="sf-label">目标语言</label>
@@ -654,7 +490,6 @@
                 </select>
             </div>
         </div>
-
         <div style="margin-bottom: 24px;">
             <label class="sf-label">模型选择</label>
             <input type="text" id="sf-cfg-model" class="sf-input" list="sf-model-list" value="${config.model}" placeholder="选择或输入模型">
@@ -665,7 +500,6 @@
                 <option value="THUDM/glm-4-9b-chat">GLM-4 9B</option>
             </datalist>
         </div>
-
         <button id="sf-save-btn" class="sf-btn sf-btn-primary">保存更改</button>
         <div style="margin-top:16px; text-align:center;">
             <a href="https://cloud.siliconflow.cn/" target="_blank" style="color:var(--sf-primary); font-size:12px; text-decoration:none; opacity:0.8;">获取免费 API Key</a>
@@ -673,12 +507,7 @@
     `;
     document.body.appendChild(settingsModal);
 
-    // 🔥 设置面板 Shader (高性能版 - 保持不变) 🔥
     new LiquidElementShader(settingsModal, {
-        width: 360,
-        height: 500,
-        resolutionScale: 0.1,
-        intensity: 20,
         sdfParams: { w: 0.48, h: 0.48, r: 0.05 },
         boxShadow: `0 20px 50px -8px rgba(0,0,0,0.2), 0 -6px 20px inset rgba(255, 255, 255, 0.4), 0 2px 15px inset rgba(0,0,0,0.1)`,
         backdropFilter: 'blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)',
@@ -691,31 +520,23 @@
         const toast = document.createElement("div");
         toast.className = "sf-toast";
         if (type === 'error') toast.classList.add('sf-shake');
-
         const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'copy' ? '📋' : '✨';
         toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
         toastContainer.appendChild(toast);
 
-        // 🔥 动态挂载 Toast Shader (完全复刻参考参数) 🔥
         const shader = new LiquidElementShader(toast, {
-            width: 200, height: 50, // 尺寸保持
-            resolutionScale: 0.5,
-            intensity: 1, // 配合 scale 计算
-            // ⚠️ 修改：完全使用参考代码的 SDF 参数
+            enableMouse: false,
+            resolutionScale: 1.0,
             sdfParams: { w: 0.3, h: 0.2, r: 0.6 },
-            // ⚠️ 修改：完全使用参考代码的阴影
             boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
-            // ⚠️ 修改：完全使用参考代码的滤镜
             backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)',
-            // ⚠️ 修改：使用浅色背景以符合"浅色液态"要求，增强通透感
-            backgroundColor: 'rgba(255, 255, 255, 0.2)'
+            backgroundColor: 'transparent'
         });
 
         requestAnimationFrame(() => toast.classList.add("sf-show"));
         setTimeout(() => {
             toast.classList.remove("sf-show");
             setTimeout(() => {
-                // 关键：销毁 Shader 清理资源
                 shader.destroy();
                 toast.remove();
             }, 500);
@@ -734,37 +555,28 @@
     document.getElementById("sf-cfg-lang").value = config.targetLang;
     document.getElementById("sf-cfg-style").value = config.transStyle;
 
-    // --- 磁吸逻辑 (iPadOS Style) ---
-    // 只有当图标显示时才激活磁吸计算
+    // --- 磁吸逻辑 ---
     let iconBaseX = 0;
     let iconBaseY = 0;
     let isIconVisible = false;
 
     document.addEventListener("mousemove", (e) => {
         if (!isIconVisible || isDragging || smartIcon.classList.contains('sf-pop-out')) return;
-
-        const range = 60; // 磁吸感应范围 (px)
-        const strength = 0.3; // 磁吸强度 (0-1)
-
-        // 计算鼠标距离图标中心的距离
-        const centerX = iconBaseX + 19; // 38/2
+        const range = 60;
+        const strength = 0.3;
+        const centerX = iconBaseX + 19;
         const centerY = iconBaseY + 19;
-
         const dx = e.clientX - centerX;
         const dy = e.clientY - centerY;
         const dist = Math.sqrt(dx*dx + dy*dy);
-
         if (dist < range) {
-            // 在范围内，计算偏移
             const moveX = dx * strength;
             const moveY = dy * strength;
-            smartIcon.style.transform = `translate(${moveX}px, ${moveY}px) scale(1.1)`; // 保持放大状态
+            smartIcon.style.transform = `translate(${moveX}px, ${moveY}px) scale(1.1)`;
         } else {
-            // 超出范围，复位
              smartIcon.style.transform = `translate(0px, 0px)`;
         }
     });
-
 
     // --- 拖拽逻辑 ---
     let isDragging = false;
@@ -773,7 +585,6 @@
 
     dragHandle.addEventListener("mousedown", (e) => {
         if (e.target.classList.contains("sf-close")) return;
-        isDragging = true;
         isDragging = true;
         const rect = settingsModal.getBoundingClientRect();
         dragOffsetX = e.clientX - rect.left;
@@ -798,16 +609,13 @@
         document.body.style.userSelect = "";
     });
 
-    // --- 设置面板开关 (含滚动锁定) ---
+    // --- 设置面板开关 ---
     function toggleSettings(show) {
         if (show) {
             document.getElementById("sf-greeting-text").innerText = getGreeting();
             settingsModal.classList.add("sf-open");
             overlay.classList.add("sf-open");
-
-            // 锁定背景滚动
             document.body.style.overflow = "hidden";
-
             if (!settingsModal.style.left) {
                  settingsModal.style.left = "50%";
                  settingsModal.style.top = "50%";
@@ -816,8 +624,6 @@
         } else {
             settingsModal.classList.remove("sf-open");
             overlay.classList.remove("sf-open");
-
-            // 解锁滚动
             document.body.style.overflow = "";
         }
     }
@@ -847,23 +653,17 @@
     let selectedRange = null;
     let selectedText = "";
 
-    // ⭐ 新增功能：Alt + 点击 自动选中并弹出图标
     document.addEventListener("click", (e) => {
         if (e.altKey && !isDragging && !settingsModal.contains(e.target)) {
             const target = e.target;
-            // 简单判断是不是文本节点或者包含文本的容器
             if (target.innerText && target.innerText.trim().length > 0) {
                 e.preventDefault();
                 e.stopPropagation();
-
-                // 编程式选中该元素的所有文本
                 const range = document.createRange();
                 range.selectNodeContents(target);
                 const selection = window.getSelection();
                 selection.removeAllRanges();
                 selection.addRange(range);
-
-                // 触发后续逻辑
                 processSelection(selection);
                 showToast("已自动选中段落", "success");
             }
@@ -872,7 +672,6 @@
 
     function processSelection(selection) {
         const text = selection.toString().trim();
-
         if (text && text.length > 0) {
             selectedText = text;
             selectedRange = selection.getRangeAt(0);
@@ -881,18 +680,14 @@
             let left = rect.right + window.scrollX + DEFAULTS.ICON_OFFSET_X;
             if (left + 40 > document.body.scrollWidth) left = document.body.scrollWidth - 50;
 
-            // 记录基准位置供磁吸使用
             iconBaseX = left;
             iconBaseY = top;
 
             smartIcon.style.top = `${top}px`;
             smartIcon.style.left = `${left}px`;
-            smartIcon.style.transform = `translate(0,0)`; // 重置磁吸偏移
-
-            // 重置动画
+            smartIcon.style.transform = `translate(0,0)`;
             smartIcon.style.display = "flex";
             isIconVisible = true;
-
             smartIcon.classList.remove("sf-pop-in");
             smartIcon.classList.remove("sf-pop-out");
             void smartIcon.offsetWidth;
@@ -904,10 +699,7 @@
         if (isDragging) return;
         if (tooltip.contains(e.target)) return;
         if (smartIcon.contains(e.target) || settingsModal.contains(e.target)) return;
-
-        // 如果按下了Alt键，交给 click 事件处理，避免冲突
         if (e.altKey) return;
-
         setTimeout(() => {
             const selection = window.getSelection();
             if (selection.toString().trim().length > 0) {
@@ -934,8 +726,6 @@
     });
 
     // --- 核心翻译逻辑 ---
-
-    // 1. 提取出核心执行函数，供图标点击和快捷键共用
     async function executeTranslation() {
         if (!config.apiKey) return toggleSettings(true);
         if (!selectedRange) return;
@@ -958,7 +748,6 @@
         doTranslation(selectedText, span);
     }
 
-    // 2. 快捷键监听：Alt + T
     document.addEventListener("keydown", (e) => {
         if (e.altKey && (e.code === "KeyZ" || e.key === "z" || e.key === "Z")) {
             const selection = window.getSelection();
@@ -966,38 +755,26 @@
                 const text = selection.toString().trim();
                 if (text) {
                     e.preventDefault();
-                    // 手动更新当前选中内容，以防没有触发 processSelection
                     selectedText = text;
                     selectedRange = selection.getRangeAt(0);
-
-                    // 如果图标正在显示，先隐藏
                     if (isIconVisible) {
                         smartIcon.style.display = "none";
                         isIconVisible = false;
                     }
-
-                    // 直接执行翻译
                     executeTranslation();
                 }
             }
         }
     });
 
-    // 3. 图标点击逻辑
     smartIcon.onclick = async (e) => {
         e.stopPropagation();
         e.preventDefault();
-
-        // 1. 播放退场动画
         smartIcon.classList.add("sf-pop-out");
-
-        // 2. 稍等片刻让动画播放
         await new Promise(r => setTimeout(r, 200));
         smartIcon.style.display = "none";
         isIconVisible = false;
         smartIcon.classList.remove("sf-pop-out");
-
-        // 3. 执行翻译
         executeTranslation();
     };
 
@@ -1040,7 +817,6 @@
 
     function updateUISuccess(span, text) {
         span.classList.remove("sf-loading");
-
         span.innerText = text;
         span.setAttribute("data-translated", text);
         span.setAttribute("data-state", "translated");
@@ -1055,12 +831,9 @@
         span.onclick = async (e) => {
             e.stopPropagation();
             hideTooltip();
-
             span.classList.add('sf-switching');
             await new Promise(r => setTimeout(r, 200));
-
             const isTrans = span.getAttribute("data-state") === "translated";
-
             if (isTrans) {
                 span.innerText = span.getAttribute("data-original");
                 span.setAttribute("data-state", "original");
@@ -1070,7 +843,6 @@
                 span.setAttribute("data-state", "translated");
                 span.classList.remove("sf-show-original");
             }
-
             span.classList.remove('sf-switching');
         };
     }
@@ -1087,12 +859,11 @@
         };
     }
 
-    // --- 智能 Tooltip 显示 (避让边缘) ---
     function showTooltip(e, original, translated) {
         tooltip.innerHTML = `
             <div class="sf-tooltip-arrow"></div>
-            <div style="margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--sf-text-sub); font-weight:700;">Original</div>
-            <div style="font-weight:500; font-size:14px; margin-bottom:12px; line-height:1.4; color:var(--sf-text-main);">${original}</div>
+            <div style="margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--sf-tooltip-sub); font-weight:700;">Original</div>
+            <div style="font-weight:500; font-size:14px; margin-bottom:12px; line-height:1.4; color:var(--sf-tooltip-text);">${original}</div>
             <button class="sf-action-btn" id="sf-btn-copy">复制译文</button>
         `;
 
