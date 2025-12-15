@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        沉浸翻译助手 (Liquid Glass Edition - Performance Optimized)
 // @namespace   http://tampermonkey.net/
-// @version     9.20
+// @version     9.25
 // @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（图标 & 设置面板）。
 // @author      WangPan
 // @match       *://*/*
@@ -43,40 +43,40 @@
     class LiquidElementShader {
         constructor(targetElement, options = {}) {
             this.target = targetElement;
-            // 内部渲染分辨率比例。越小越流畅，0.1 表示仅计算 1/100 的像素
+            // 内部渲染分辨率比例。越小越流畅
             this.resolutionScale = options.resolutionScale || 0.1;
+            // 扭曲强度系数
+            this.intensity = options.intensity || 20;
 
             // 元素的显示尺寸
             this.width = options.width || 100;
             this.height = options.height || 100;
 
-            // 计算实际画布尺寸 (大幅减小计算量)
+            // 计算实际画布尺寸
             this.canvasW = Math.ceil(this.width * this.resolutionScale);
             this.canvasH = Math.ceil(this.height * this.resolutionScale);
 
             this.sdfParams = options.sdfParams || { w: 0.35, h: 0.35, r: 0.2 };
             this.boxShadow = options.boxShadow || '';
+            this.backdropFilter = options.backdropFilter || '';
+
             this.id = LiquidCore.generateId();
 
             this.mouse = { x: 0.5, y: 0.5 };
             this.targetMouse = { x: 0.5, y: 0.5 };
             this.isRendering = false;
-            this.isVisible = false; // 追踪元素是否可见
+            this.isVisible = false;
 
             this.initSVG();
             this.initCanvas();
             this.applyStyles();
 
-            // 使用单一的全局监听器来更新鼠标目标，降低开销
             this.bindEvents();
-
-            // 启动渲染循环
             this.startLoop();
         }
 
         bindEvents() {
             document.addEventListener('mousemove', (e) => {
-                // 如果元素不可见（例如隐藏的图标或关闭的设置面板），直接跳过计算
                 if (this.target.offsetParent === null) {
                     this.isVisible = false;
                     return;
@@ -87,12 +87,10 @@
                 const cx = rect.left + rect.width / 2;
                 const cy = rect.top + rect.height / 2;
 
-                // 增加感应范围，使鼠标在附近时也有微弱反应
-                // 只有当鼠标移动时才更新目标值，渲染循环会去平滑逼近
+                // 增加感应范围
                 this.targetMouse.x = 0.5 + (e.clientX - cx) / 500;
                 this.targetMouse.y = 0.5 + (e.clientY - cy) / 500;
 
-                // 唤醒渲染循环
                 if (!this.isRendering) {
                     this.isRendering = true;
                     this.startLoop();
@@ -117,7 +115,6 @@
 
             this.feImage = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
             this.feImage.setAttribute('id', `${this.id}_map`);
-            // feImage 保持 100% 拉伸，但源图是低分辨率的
             this.feImage.setAttribute('width', '100%');
             this.feImage.setAttribute('height', '100%');
             this.feImage.setAttribute('preserveAspectRatio', 'none');
@@ -127,7 +124,7 @@
             this.feDisplacementMap.setAttribute('in2', `${this.id}_map`);
             this.feDisplacementMap.setAttribute('xChannelSelector', 'R');
             this.feDisplacementMap.setAttribute('yChannelSelector', 'G');
-            this.feDisplacementMap.setAttribute('scale', '20');
+            // scale 将在 updateShader 中动态设置
 
             filter.appendChild(this.feImage);
             filter.appendChild(this.feDisplacementMap);
@@ -138,16 +135,18 @@
 
         initCanvas() {
             this.canvas = document.createElement('canvas');
-            // 关键：使用低分辨率尺寸
             this.canvas.width = this.canvasW;
             this.canvas.height = this.canvasH;
             this.context = this.canvas.getContext('2d', { willReadFrequently: true });
         }
 
         applyStyles() {
-            this.target.style.background = 'rgba(255, 255, 255, 0.05)';
-            // 降低一点模糊半径以提升性能，同时配合低分纹理的平滑
-            this.target.style.backdropFilter = `url(#${this.id}_filter) blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)`;
+            this.target.style.background = 'rgba(255, 255, 255, 0.01)'; // 几乎完全透明，依赖滤镜
+            // 使用传入的 backdropFilter
+            this.target.style.backdropFilter = this.backdropFilter ?
+                `url(#${this.id}_filter) ${this.backdropFilter}` :
+                `url(#${this.id}_filter) blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)`;
+
             this.target.style.boxShadow = this.boxShadow || `0 4px 8px rgba(0, 0, 0, 0.15), 0 -6px 15px inset rgba(255, 255, 255, 0.4), 0 2px 10px inset rgba(0,0,0,0.1)`;
             this.target.style.overflow = 'hidden';
         }
@@ -165,15 +164,12 @@
             const mx = mouse.x - 0.5;
             const my = mouse.y - 0.5;
 
-            // 简化距离计算，移除开方，改为曼哈顿距离近似或直接平方比较，提升微量性能
-            // 这里为了效果保留 sqrt，但在 JS 中 Math.hypot 较快
             const distMouse = Math.hypot(uv.x - mouse.x, uv.y - mouse.y);
             const mouseInteraction = Math.max(0, 1 - distMouse * 2) * 0.1;
 
             const displacement = LiquidCore.smoothStep(0.8, 0, distanceToEdge - 0.15 + mouseInteraction);
             const scaled = LiquidCore.smoothStep(0, 1, displacement);
 
-            // 减少乘法操作
             return {
                 x: ix * scaled + 0.5 + mx * 0.05,
                 y: iy * scaled + 0.5 + my * 0.05
@@ -183,16 +179,13 @@
         updateShader() {
             const w = this.canvasW;
             const h = this.canvasH;
-            // 复用 ImageData 对象，避免垃圾回收
             if (!this.imgData) this.imgData = this.context.createImageData(w, h);
             const data = this.imgData.data;
 
             let maxScale = 0;
-            // 预先计算常量
             const wInv = 1.0 / w;
             const hInv = 1.0 / h;
 
-            // 使用一维数组存储 rawValues 避免 push 操作
             if (!this.rawValues) this.rawValues = new Float32Array(w * h * 2);
             let rawIdx = 0;
 
@@ -227,7 +220,7 @@
                 const r = this.rawValues[rawIdx++] * scaleInv + 0.5;
                 const g = this.rawValues[rawIdx++] * scaleInv + 0.5;
 
-                data[dataIdx++] = (r * 255) | 0; // 位运算取整
+                data[dataIdx++] = (r * 255) | 0;
                 data[dataIdx++] = (g * 255) | 0;
                 data[dataIdx++] = 0;
                 data[dataIdx++] = 255;
@@ -237,31 +230,26 @@
             const dataURL = this.canvas.toDataURL();
             this.feImage.setAttributeNS('http://www.w3.org/1999/xlink', 'href', dataURL);
 
-            // 补偿因为分辨率降低导致的 scale 变化
-            const finalScale = (maxScale / this.resolutionScale * 20);
+            const finalScale = (maxScale / this.resolutionScale * this.intensity);
             this.feDisplacementMap.setAttribute('scale', finalScale.toString());
         }
 
         startLoop() {
             const animate = () => {
-                // 如果不可见，停止渲染，重置状态
                 if (!this.isVisible) {
                     this.isRendering = false;
                     return;
                 }
 
-                // 缓动算法：让 currentMouse 平滑接近 targetMouse
                 const dx = this.targetMouse.x - this.mouse.x;
                 const dy = this.targetMouse.y - this.mouse.y;
 
-                // 增加阻尼感
                 this.mouse.x += dx * 0.1;
                 this.mouse.y += dy * 0.1;
 
-                // 检查是否已经足够接近（休眠检查）
                 if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) {
                     this.isRendering = false;
-                    return; // 停止循环，节省 CPU
+                    return;
                 }
 
                 this.updateShader();
@@ -314,12 +302,14 @@
 
             /* Light Mode */
             --sf-glass-border: rgba(255, 255, 255, 0.65);
+            /* 字体颜色调整为 Apple 风格深色 */
             --sf-text-main: #1d1d1f;
             --sf-text-sub: #86868b;
+
             --sf-input-bg: rgba(118, 118, 128, 0.12);
             --sf-input-focus-bg: rgba(255, 255, 255, 1);
             --sf-icon-bg: rgba(255, 255, 255, 0.95);
-            --sf-tooltip-bg: rgba(255, 255, 255, 0.88);
+            --sf-tooltip-bg: rgba(255, 255, 255, 0.96); /* 稍微增加不透明度 */
             --sf-tooltip-text: #1d1d1f;
             --sf-option-bg: #ffffff;
             --sf-shimmer-bg: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.12) 37%, rgba(0,0,0,0.06) 63%);
@@ -329,13 +319,13 @@
             :root {
                 /* Dark Mode */
                 --sf-glass-border: rgba(255, 255, 255, 0.12);
-                --sf-text-main: #f5f5f7;
-                --sf-text-sub: #a1a1a6;
+                --sf-text-main: #ffffff;
+                --sf-text-sub: #ebebf5;
                 --sf-input-bg: rgba(118, 118, 128, 0.24);
                 --sf-input-focus-bg: rgba(0, 0, 0, 0.3);
                 --sf-icon-bg: rgba(44, 44, 46, 0.95);
-                --sf-tooltip-bg: rgba(30, 30, 30, 0.88);
-                --sf-tooltip-text: #f5f5f7;
+                --sf-tooltip-bg: rgba(30, 30, 30, 0.95);
+                --sf-tooltip-text: #ffffff;
                 --sf-option-bg: #2c2c2e;
                 --sf-shimmer-bg: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.18) 37%, rgba(255,255,255,0.1) 63%);
             }
@@ -430,9 +420,7 @@
         #sf-settings-modal {
             position: fixed; top: 50%; left: 50%;
             width: 360px;
-            /* background/backdrop 由 JS 控制 */
             border: 1px solid var(--sf-glass-border);
-            /* box-shadow 由 JS 控制 */
             color: var(--sf-text-main);
             padding: 24px 28px;
             border-radius: 20px;
@@ -460,7 +448,7 @@
 
         .sf-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; cursor: grab; }
         .sf-title { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.4px; color: var(--sf-text-main) !important; }
-        .sf-greeting { font-size: 13px; color: var(--sf-text-sub); font-weight: 400; margin-top: 2px; }
+        .sf-greeting { font-size: 13px; color: var(--sf-text-sub); font-weight: 500; margin-top: 2px; }
         .sf-label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: var(--sf-text-sub); letter-spacing: -0.2px; }
 
         .sf-input, .sf-select {
@@ -468,6 +456,7 @@
             background: var(--sf-input-bg); color: var(--sf-text-main);
             border-radius: 10px; font-size: 15px; outline: none;
             transition: all 0.2s; font-family: var(--sf-font);
+            font-weight: 500;
         }
         .sf-input:focus, .sf-select:focus {
             background: var(--sf-input-focus-bg);
@@ -537,9 +526,10 @@
             background: var(--sf-glass-bg);
             backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--sf-glass-border);
-            color: var(--sf-text-main); padding: 12px 24px; border-radius: 30px;
+            color: #1d1d1f; /* 强制 Apple 风格深色文字 */
+            padding: 12px 24px; border-radius: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            font-size: 14px; font-weight: 600;
+            font-size: 14px; font-weight: 500; /* 加粗字重 */
             display: flex; align-items: center; gap: 10px;
             opacity: 0; transform: translateY(-30px) scale(0.9);
             transition: all 0.5s var(--sf-ease-spring);
@@ -575,12 +565,20 @@
     smartIcon.innerHTML = `<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>`;
     document.body.appendChild(smartIcon);
 
-    // 🔥 为图标应用 Liquid Glass (分辨率比例 0.5) 🔥
+    // 🔥 为图标应用 Liquid Glass (完全复刻参考参数) 🔥
     new LiquidElementShader(smartIcon, {
         width: 38,
         height: 38,
-        resolutionScale: 0.5, // 图标很小，稍微高一点也没事
-        sdfParams: { w: 0.35, h: 0.35, r: 0.2 }
+        // 高质量渲染，因为图标很小，不会影响性能
+        resolutionScale: 1.0,
+        // 恢复物理真实强度，不加倍
+        intensity: 1,
+        // 参考代码的形状参数
+        sdfParams: { w: 0.3, h: 0.3, r: 0.6 },
+        // 参考代码的阴影参数
+        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
+        // 参考代码的滤镜参数 (极低模糊，高对比)
+        backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)'
     });
 
     const tooltip = document.createElement("div");
@@ -653,13 +651,16 @@
     `;
     document.body.appendChild(settingsModal);
 
-    // 🔥 为设置面板应用 Liquid Glass (性能优化版) 🔥
+    // 🔥 为设置面板应用 Liquid Glass (高性能版 - 保持不变) 🔥
     new LiquidElementShader(settingsModal, {
         width: 360,
         height: 500,
         resolutionScale: 0.1, // 分辨率降至 10%，极大提升性能
+        intensity: 20, // 保持适中强度
         sdfParams: { w: 0.48, h: 0.48, r: 0.05 },
-        boxShadow: `0 20px 50px -8px rgba(0,0,0,0.2), 0 -6px 20px inset rgba(255, 255, 255, 0.4), 0 2px 15px inset rgba(0,0,0,0.1)`
+        boxShadow: `0 20px 50px -8px rgba(0,0,0,0.2), 0 -6px 20px inset rgba(255, 255, 255, 0.4), 0 2px 15px inset rgba(0,0,0,0.1)`,
+        // 保持旧的高模糊风格，适合大面积背景
+        backdropFilter: 'blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)'
     });
 
     // --- 🎮 交互逻辑 ---
@@ -1048,8 +1049,10 @@
     function showTooltip(e, original, translated) {
         tooltip.innerHTML = `
             <div class="sf-tooltip-arrow"></div>
-            <div style="opacity:0.6; margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Original</div>
-            <div style="font-weight:400; font-size:14px; margin-bottom:12px; line-height:1.4;">${original}</div>
+            <!-- 关键修改：去除了 opacity:0.6，文字颜色加深，字重增加 -->
+            <div style="margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--sf-text-sub); font-weight:700;">Original</div>
+            <!-- 关键修改：字重增加到 500，颜色设为主要文字颜色 -->
+            <div style="font-weight:500; font-size:14px; margin-bottom:12px; line-height:1.4; color:var(--sf-text-main);">${original}</div>
             <button class="sf-action-btn" id="sf-btn-copy">复制译文</button>
         `;
 
