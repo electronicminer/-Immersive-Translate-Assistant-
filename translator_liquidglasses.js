@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手 (Liquid Glass Edition - Performance Optimized)
 // @namespace   http://tampermonkey.net/
-// @version     9.25
-// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（图标 & 设置面板）。
+// @version     9.30
+// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（图标 & 设置面板 & 提示框）。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -39,26 +39,23 @@
         }
     };
 
-    // --- Shader 控制器 (高性能版) ---
+    // --- Shader 控制器 (高性能版 & 支持销毁) ---
     class LiquidElementShader {
         constructor(targetElement, options = {}) {
             this.target = targetElement;
-            // 内部渲染分辨率比例。越小越流畅
             this.resolutionScale = options.resolutionScale || 0.1;
-            // 扭曲强度系数
             this.intensity = options.intensity || 20;
 
-            // 元素的显示尺寸
             this.width = options.width || 100;
             this.height = options.height || 100;
 
-            // 计算实际画布尺寸
             this.canvasW = Math.ceil(this.width * this.resolutionScale);
             this.canvasH = Math.ceil(this.height * this.resolutionScale);
 
             this.sdfParams = options.sdfParams || { w: 0.35, h: 0.35, r: 0.2 };
             this.boxShadow = options.boxShadow || '';
             this.backdropFilter = options.backdropFilter || '';
+            this.backgroundColor = options.backgroundColor || 'rgba(255, 255, 255, 0.01)';
 
             this.id = LiquidCore.generateId();
 
@@ -71,31 +68,31 @@
             this.initCanvas();
             this.applyStyles();
 
-            this.bindEvents();
+            // 绑定事件并保存引用以便销毁
+            this.moveHandler = (e) => this.handleMove(e);
+            document.addEventListener('mousemove', this.moveHandler);
+
             this.startLoop();
         }
 
-        bindEvents() {
-            document.addEventListener('mousemove', (e) => {
-                if (this.target.offsetParent === null) {
-                    this.isVisible = false;
-                    return;
-                }
-                this.isVisible = true;
+        handleMove(e) {
+            if (this.target.offsetParent === null) {
+                this.isVisible = false;
+                return;
+            }
+            this.isVisible = true;
 
-                const rect = this.target.getBoundingClientRect();
-                const cx = rect.left + rect.width / 2;
-                const cy = rect.top + rect.height / 2;
+            const rect = this.target.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
 
-                // 增加感应范围
-                this.targetMouse.x = 0.5 + (e.clientX - cx) / 500;
-                this.targetMouse.y = 0.5 + (e.clientY - cy) / 500;
+            this.targetMouse.x = 0.5 + (e.clientX - cx) / 500;
+            this.targetMouse.y = 0.5 + (e.clientY - cy) / 500;
 
-                if (!this.isRendering) {
-                    this.isRendering = true;
-                    this.startLoop();
-                }
-            });
+            if (!this.isRendering) {
+                this.isRendering = true;
+                this.startLoop();
+            }
         }
 
         initSVG() {
@@ -124,7 +121,6 @@
             this.feDisplacementMap.setAttribute('in2', `${this.id}_map`);
             this.feDisplacementMap.setAttribute('xChannelSelector', 'R');
             this.feDisplacementMap.setAttribute('yChannelSelector', 'G');
-            // scale 将在 updateShader 中动态设置
 
             filter.appendChild(this.feImage);
             filter.appendChild(this.feDisplacementMap);
@@ -141,12 +137,10 @@
         }
 
         applyStyles() {
-            this.target.style.background = 'rgba(255, 255, 255, 0.01)'; // 几乎完全透明，依赖滤镜
-            // 使用传入的 backdropFilter
+            this.target.style.background = this.backgroundColor;
             this.target.style.backdropFilter = this.backdropFilter ?
                 `url(#${this.id}_filter) ${this.backdropFilter}` :
                 `url(#${this.id}_filter) blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)`;
-
             this.target.style.boxShadow = this.boxShadow || `0 4px 8px rgba(0, 0, 0, 0.15), 0 -6px 15px inset rgba(255, 255, 255, 0.4), 0 2px 10px inset rgba(0,0,0,0.1)`;
             this.target.style.overflow = 'hidden';
         }
@@ -177,6 +171,8 @@
         }
 
         updateShader() {
+            if (this.destroyed) return; // 防止销毁后调用
+
             const w = this.canvasW;
             const h = this.canvasH;
             if (!this.imgData) this.imgData = this.context.createImageData(w, h);
@@ -236,6 +232,8 @@
 
         startLoop() {
             const animate = () => {
+                if (this.destroyed) return;
+
                 if (!this.isVisible) {
                     this.isRendering = false;
                     return;
@@ -256,6 +254,18 @@
                 requestAnimationFrame(animate);
             };
             requestAnimationFrame(animate);
+        }
+
+        // 新增：资源清理方法
+        destroy() {
+            this.destroyed = true;
+            document.removeEventListener('mousemove', this.moveHandler);
+            if (this.svg && this.svg.parentNode) {
+                this.svg.remove();
+            }
+            this.svg = null;
+            this.canvas = null;
+            this.context = null;
         }
     }
 
@@ -301,15 +311,16 @@
             --sf-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
             /* Light Mode */
-            --sf-glass-border: rgba(255, 255, 255, 0.65);
-            /* 字体颜色调整为 Apple 风格深色 */
+            --sf-glass-border: rgba(0, 0, 0, 0.12);
+            --sf-panel-bg: rgba(255, 255, 255, 0.75);
+
             --sf-text-main: #1d1d1f;
-            --sf-text-sub: #86868b;
+            --sf-text-sub: #555555;
 
             --sf-input-bg: rgba(118, 118, 128, 0.12);
             --sf-input-focus-bg: rgba(255, 255, 255, 1);
             --sf-icon-bg: rgba(255, 255, 255, 0.95);
-            --sf-tooltip-bg: rgba(255, 255, 255, 0.96); /* 稍微增加不透明度 */
+            /* Tooltip 样式重置，完全交由 JS Shader 接管背景 */
             --sf-tooltip-text: #1d1d1f;
             --sf-option-bg: #ffffff;
             --sf-shimmer-bg: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.12) 37%, rgba(0,0,0,0.06) 63%);
@@ -319,12 +330,13 @@
             :root {
                 /* Dark Mode */
                 --sf-glass-border: rgba(255, 255, 255, 0.12);
+                --sf-panel-bg: rgba(30, 30, 30, 0.7);
+
                 --sf-text-main: #ffffff;
                 --sf-text-sub: #ebebf5;
                 --sf-input-bg: rgba(118, 118, 128, 0.24);
                 --sf-input-focus-bg: rgba(0, 0, 0, 0.3);
                 --sf-icon-bg: rgba(44, 44, 46, 0.95);
-                --sf-tooltip-bg: rgba(30, 30, 30, 0.95);
                 --sf-tooltip-text: #ffffff;
                 --sf-option-bg: #2c2c2e;
                 --sf-shimmer-bg: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.18) 37%, rgba(255,255,255,0.1) 63%);
@@ -394,10 +406,12 @@
         .sf-translated-node.sf-switching { opacity: 0; transform: scale(0.96) blur(2px); }
         .sf-translated-node:hover { background-color: rgba(0, 122, 255, 0.1); border-bottom-style: solid; }
 
+        /* ⚠️ 关键修改：彻底移除“退回原文”状态的特殊样式，使其看起来和普通文本一致 */
         .sf-translated-node.sf-show-original {
-            border-bottom: 1.5px dotted var(--sf-text-sub);
-            filter: grayscale(1);
-            color: var(--sf-text-sub);
+            border-bottom: none !important;
+            filter: none !important;
+            color: inherit !important;
+            background: transparent !important;
         }
 
         .sf-translated-node.sf-loading {
@@ -416,7 +430,7 @@
             background: rgba(255, 59, 48, 0.08);
         }
 
-        /* --- 设置面板 (去除默认背景，交由 Shader 处理) --- */
+        /* --- 设置面板 --- */
         #sf-settings-modal {
             position: fixed; top: 50%; left: 50%;
             width: 360px;
@@ -489,15 +503,15 @@
         }
         .sf-close:hover { background: rgba(142, 142, 147, 0.3); color: var(--sf-text-main); transform: rotate(90deg); }
 
-        /* --- Tooltip --- */
+        /* --- Tooltip (去除背景，由 Shader 接管) --- */
         .sf-tooltip {
-            position: fixed; background: var(--sf-tooltip-bg);
-            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            position: fixed;
+            /* background, backdrop-filter, box-shadow 都由 JS 设置 */
+            border: 1px solid var(--sf-glass-border); /* 保留深色边框 */
             color: var(--sf-tooltip-text); padding: 12px 16px; border-radius: 14px;
             font-size: 13px; line-height: 1.5; max-width: 300px;
             z-index: 2147483647;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.25);
-            font-family: var(--sf-font); border: 1px solid rgba(128,128,128,0.1);
+            font-family: var(--sf-font);
             opacity: 0; transform: scale(0.8);
             pointer-events: none;
             transition: opacity 0.2s, transform 0.4s var(--sf-ease-spring);
@@ -506,11 +520,12 @@
         .sf-tooltip.sf-show { opacity: 1; transform: scale(1) translateY(0) !important; pointer-events: auto; }
 
         .sf-tooltip-arrow {
-            position: absolute; width: 12px; height: 12px; background: var(--sf-tooltip-bg);
+            position: absolute; width: 12px; height: 12px;
+            background: var(--sf-panel-bg); /* 与面板背景一致 */
             transform: rotate(45deg); border-radius: 2px;
         }
-        .sf-tooltip.sf-top .sf-tooltip-arrow { bottom: -6px; left: 16px; border-bottom: 1px solid rgba(128,128,128,0.1); border-right: 1px solid rgba(128,128,128,0.1); }
-        .sf-tooltip.sf-bottom .sf-tooltip-arrow { top: -6px; left: 16px; border-top: 1px solid rgba(128,128,128,0.1); border-left: 1px solid rgba(128,128,128,0.1); }
+        .sf-tooltip.sf-top .sf-tooltip-arrow { bottom: -6px; left: 16px; border-bottom: 1px solid var(--sf-glass-border); border-right: 1px solid var(--sf-glass-border); }
+        .sf-tooltip.sf-bottom .sf-tooltip-arrow { top: -6px; left: 16px; border-top: 1px solid var(--sf-glass-border); border-left: 1px solid var(--sf-glass-border); }
 
         .sf-action-btn {
             margin-top: 8px; width: 100%;
@@ -521,15 +536,13 @@
         .sf-action-btn:hover { background: rgba(128,128,128,0.25); }
         .sf-action-btn:active { background: rgba(128,128,128,0.1); transform: scale(0.96); }
 
-        /* --- Toast 通知 --- */
+        /* --- Toast 通知 (去除背景，由 Shader 接管) --- */
         .sf-toast {
-            background: var(--sf-glass-bg);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            /* background/backdrop 由 JS 设置 */
             border: 1px solid var(--sf-glass-border);
-            color: #1d1d1f; /* 强制 Apple 风格深色文字 */
-            padding: 12px 24px; border-radius: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            font-size: 14px; font-weight: 500; /* 加粗字重 */
+            color: #1d1d1f;
+            padding: 12px 24px; border-radius: 50px; /* ⚠️ 修改：增加圆角以匹配 Shader 的胶囊形状 */
+            font-size: 14px; font-weight: 500;
             display: flex; align-items: center; gap: 10px;
             opacity: 0; transform: translateY(-30px) scale(0.9);
             transition: all 0.5s var(--sf-ease-spring);
@@ -565,25 +578,34 @@
     smartIcon.innerHTML = `<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>`;
     document.body.appendChild(smartIcon);
 
-    // 🔥 为图标应用 Liquid Glass (完全复刻参考参数) 🔥
+    // 🔥 图标 Shader (参数复刻参考代码) 🔥
     new LiquidElementShader(smartIcon, {
         width: 38,
         height: 38,
-        // 高质量渲染，因为图标很小，不会影响性能
         resolutionScale: 1.0,
-        // 恢复物理真实强度，不加倍
         intensity: 1,
-        // 参考代码的形状参数
         sdfParams: { w: 0.3, h: 0.3, r: 0.6 },
-        // 参考代码的阴影参数
         boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
-        // 参考代码的滤镜参数 (极低模糊，高对比)
-        backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)'
+        backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)',
+        backgroundColor: 'rgba(255, 255, 255, 0.01)' // 图标保持全透
     });
 
     const tooltip = document.createElement("div");
     tooltip.className = "sf-tooltip";
     document.body.appendChild(tooltip);
+
+    // 🔥 Tooltip Shader (应用参考参数 + 优化背景) 🔥
+    new LiquidElementShader(tooltip, {
+        width: 300, // 估算尺寸
+        height: 150,
+        resolutionScale: 0.5, // 性能平衡
+        intensity: 1,
+        // 调整形状参数以适应矩形气泡：宽一点，圆角稍小
+        sdfParams: { w: 0.3, h: 0.2, r: 0.6 },
+        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
+        backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)',
+        backgroundColor: 'var(--sf-panel-bg)' // 使用乳白背景保证文字可读
+    });
 
     const toastContainer = document.createElement("div");
     toastContainer.id = "sf-toast-container";
@@ -651,16 +673,16 @@
     `;
     document.body.appendChild(settingsModal);
 
-    // 🔥 为设置面板应用 Liquid Glass (高性能版 - 保持不变) 🔥
+    // 🔥 设置面板 Shader (高性能版 - 保持不变) 🔥
     new LiquidElementShader(settingsModal, {
         width: 360,
         height: 500,
-        resolutionScale: 0.1, // 分辨率降至 10%，极大提升性能
-        intensity: 20, // 保持适中强度
+        resolutionScale: 0.1,
+        intensity: 20,
         sdfParams: { w: 0.48, h: 0.48, r: 0.05 },
         boxShadow: `0 20px 50px -8px rgba(0,0,0,0.2), 0 -6px 20px inset rgba(255, 255, 255, 0.4), 0 2px 15px inset rgba(0,0,0,0.1)`,
-        // 保持旧的高模糊风格，适合大面积背景
-        backdropFilter: 'blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)'
+        backdropFilter: 'blur(8px) contrast(1.1) brightness(1.1) saturate(1.2)',
+        backgroundColor: 'var(--sf-panel-bg)'
     });
 
     // --- 🎮 交互逻辑 ---
@@ -673,10 +695,30 @@
         const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'copy' ? '📋' : '✨';
         toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
         toastContainer.appendChild(toast);
+
+        // 🔥 动态挂载 Toast Shader (完全复刻参考参数) 🔥
+        const shader = new LiquidElementShader(toast, {
+            width: 200, height: 50, // 尺寸保持
+            resolutionScale: 0.5,
+            intensity: 1, // 配合 scale 计算
+            // ⚠️ 修改：完全使用参考代码的 SDF 参数
+            sdfParams: { w: 0.3, h: 0.2, r: 0.6 },
+            // ⚠️ 修改：完全使用参考代码的阴影
+            boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
+            // ⚠️ 修改：完全使用参考代码的滤镜
+            backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)',
+            // ⚠️ 修改：使用浅色背景以符合"浅色液态"要求，增强通透感
+            backgroundColor: 'rgba(255, 255, 255, 0.2)'
+        });
+
         requestAnimationFrame(() => toast.classList.add("sf-show"));
         setTimeout(() => {
             toast.classList.remove("sf-show");
-            setTimeout(() => toast.remove(), 500);
+            setTimeout(() => {
+                // 关键：销毁 Shader 清理资源
+                shader.destroy();
+                toast.remove();
+            }, 500);
         }, 2500);
     }
 
@@ -751,7 +793,7 @@
         settingsModal.style.top = y + "px";
     });
 
-    document.addEventListener("mouseup", () => {
+    document.addEventListener("mouseup", (e) => {
         isDragging = false;
         document.body.style.userSelect = "";
     });
@@ -1049,9 +1091,7 @@
     function showTooltip(e, original, translated) {
         tooltip.innerHTML = `
             <div class="sf-tooltip-arrow"></div>
-            <!-- 关键修改：去除了 opacity:0.6，文字颜色加深，字重增加 -->
             <div style="margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--sf-text-sub); font-weight:700;">Original</div>
-            <!-- 关键修改：字重增加到 500，颜色设为主要文字颜色 -->
             <div style="font-weight:500; font-size:14px; margin-bottom:12px; line-height:1.4; color:var(--sf-text-main);">${original}</div>
             <button class="sf-action-btn" id="sf-btn-copy">复制译文</button>
         `;
