@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name        沉浸翻译助手 (Liquid Glass Edition )
+// @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.37
+// @version     9.38
 // @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（复刻 Shu Ding 算法）。折射率增强版。
 // @author      WangPan
 // @match       *://*/*
@@ -41,7 +41,6 @@
         constructor(targetElement, options = {}) {
             this.target = targetElement;
             this.resolutionScale = options.resolutionScale || 1.0;
-            // 新增：控制折射扭曲强度 (默认为 0.5)
             this.distortionIntensity = options.distortionIntensity || 0.5;
 
             this.width = options.width || 100;
@@ -195,7 +194,6 @@
                 }
             }
 
-            // 应用配置的折射强度 (此处控制物理扭曲幅度)
             maxScale *= this.distortionIntensity;
 
             if (maxScale < 0.001) maxScale = 0.001;
@@ -270,7 +268,10 @@
         model: GM_getValue("SF_MODEL", DEFAULTS.MODEL),
         targetLang: GM_getValue("SF_TARGET_LANG", DEFAULTS.TARGET_LANG),
         transStyle: GM_getValue("SF_TRANS_STYLE", DEFAULTS.TRANS_STYLE),
-        apiKey: GM_getValue("SF_API_KEY", "")
+        apiKey: GM_getValue("SF_API_KEY", ""),
+        // --- 新增配置项 ---
+        enableIcon: GM_getValue("SF_ENABLE_ICON", true),
+        enableTooltip: GM_getValue("SF_ENABLE_TOOLTIP", true)
     };
 
     // --- 🎨 样式注入 (CSS) ---
@@ -292,7 +293,6 @@
             --sf-input-focus-bg: rgba(255, 255, 255, 1);
             --sf-icon-bg: rgba(255, 255, 255, 0.95);
 
-            /* Tooltip 专用颜色：强制深色模式 */
             --sf-tooltip-text: #ffffff;
             --sf-tooltip-sub: rgba(255, 255, 255, 0.6);
             --sf-tooltip-bg-dark: rgba(20, 20, 20, 0.75);
@@ -314,7 +314,6 @@
             }
         }
 
-        /* --- 1. 智能跟随图标 --- */
         #sf-smart-icon {
             position: absolute; width: 38px; height: 38px; border-radius: 12px; cursor: pointer; z-index: 2147483647;
             display: none; align-items: center; justify-content: center; border: none; user-select: none;
@@ -327,7 +326,6 @@
         #sf-smart-icon.sf-pop-in svg path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: sf-draw-stroke 0.8s ease-out forwards; }
         #sf-smart-icon:active { transform: scale(0.92) !important; }
 
-        /* --- 2. 翻译结果 --- */
         .sf-translated-node { background-color: transparent; border-bottom: 1.5px dashed var(--sf-primary); cursor: pointer; border-radius: 4px; padding: 0 2px; display: inline; transition: all 0.2s; position: relative; -webkit-font-smoothing: antialiased; }
         .sf-translated-node[data-state="translated"] { animation: sf-type-settle 0.7s var(--sf-ease-out-expo) forwards, sf-highlight-flash 1s ease-out; }
         .sf-translated-node.sf-switching { opacity: 0; transform: scale(0.96) blur(2px); }
@@ -336,7 +334,6 @@
         .sf-translated-node.sf-loading { color: transparent !important; background: var(--sf-shimmer-bg); background-size: 400% 100%; animation: sf-shimmer-wave 1.4s infinite cubic-bezier(0.23, 1, 0.32, 1); border-radius: 6px; pointer-events: none; border: none; }
         .sf-translated-node.sf-error { color: var(--sf-error) !important; border-bottom: 1.5px solid var(--sf-error); background: rgba(255, 59, 48, 0.08); }
 
-        /* --- 设置面板 --- */
         #sf-settings-modal { position: fixed; top: 50%; left: 50%; width: 360px; border: 1px solid var(--sf-glass-border); color: var(--sf-text-main); padding: 24px 28px; border-radius: 20px; z-index: 2147483647; font-family: var(--sf-font); opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none; transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo); -webkit-font-smoothing: antialiased; }
         #sf-settings-modal.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
         #sf-settings-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.15); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 2147483646; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
@@ -357,11 +354,9 @@
         .sf-close { cursor: pointer; width: 28px; height: 28px; border-radius: 50%; background: rgba(142, 142, 147, 0.15); color: var(--sf-text-sub); display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.2s; font-weight: bold; }
         .sf-close:hover { background: rgba(142, 142, 147, 0.3); color: var(--sf-text-main); transform: rotate(90deg); }
 
-        /* --- Tooltip --- */
         .sf-tooltip {
             position: fixed;
             border: 1px solid rgba(255,255,255,0.15);
-            /* ⚠️ 文字颜色调整为白色，增强在深色磨砂背景上的可读性 */
             color: var(--sf-tooltip-text);
             padding: 12px 16px;
             border-radius: 24px;
@@ -377,7 +372,6 @@
 
         .sf-tooltip-arrow {
             position: absolute; width: 12px; height: 12px;
-            /* ⚠️ 箭头颜色必须匹配深色背景 */
             background: var(--sf-tooltip-bg-dark);
             transform: rotate(45deg); border-radius: 2px;
         }
@@ -393,7 +387,6 @@
         .sf-action-btn:hover { background: rgba(255,255,255,0.2); }
         .sf-action-btn:active { background: rgba(255,255,255,0.05); transform: scale(0.96); }
 
-        /* --- Toast 通知 --- */
         .sf-toast {
             border: 1px solid var(--sf-glass-border); color: #1d1d1f; padding: 12px 28px; border-radius: 50px;
             font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
@@ -403,7 +396,15 @@
         .sf-toast.sf-show { opacity: 1; transform: translateY(0) scale(1); }
         .sf-toast.sf-shake { animation: sf-shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 
-        /* 动画关键帧 */
+        /* --- iOS Toggle Switch Styles --- */
+        .sf-setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .sf-switch { position: relative; display: inline-block; width: 50px; height: 30px; }
+        .sf-switch input { opacity: 0; width: 0; height: 0; }
+        .sf-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(120, 120, 128, 0.16); transition: .4s; border-radius: 34px; }
+        .sf-slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.15), 0 3px 1px rgba(0,0,0,0.06); }
+        input:checked + .sf-slider { background-color: var(--sf-success); }
+        input:checked + .sf-slider:before { transform: translateX(20px); }
+
         @keyframes sf-draw-stroke { from { stroke-dashoffset: 20; } to { stroke-dashoffset: 0; } }
         @keyframes sf-spring-in { 0% { opacity: 0; transform: scale(0.3); } 50% { transform: scale(1.15); } 100% { opacity: 1; transform: scale(1); } }
         @keyframes sf-pop-out { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.5); } }
@@ -429,11 +430,9 @@
     // 🔥 高折射率水晶特效 🔥
     new LiquidElementShader(smartIcon, {
         enableMouse: true,
-        // 💎 核心修改：大幅提高扭曲强度 (1.8)，模拟高折射率玻璃
         distortionIntensity: 1.8,
         sdfParams: { w: 0.3, h: 0.3, r: 0.6 },
         boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
-        // 💎 核心修改：增加 Blur (2px) 和 Contrast (1.35) 模拟晶体厚重感
         backdropFilter: 'blur(2px) contrast(1.35) brightness(1.1) saturate(1.2)',
         backgroundColor: 'rgba(255, 255, 255, 0.05)'
     });
@@ -445,11 +444,8 @@
     // 🔥 Tooltip Shader: 深色背景 + 高斯模糊 🔥
     new LiquidElementShader(tooltip, {
         sdfParams: { w: 0.3, h: 0.2, r: 0.6 },
-        // 深色投影增加层次感
         boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.1) inset',
-        // ⚠️ 关键调整：blur 增加到 10px 确保可读，降低 brightness 模拟深色玻璃
         backdropFilter: 'blur(0px) contrast(1.0) brightness(0.8) saturate(1.1)',
-        // ⚠️ 关键调整：深色半透明背景
         backgroundColor: 'var(--sf-tooltip-bg-dark)'
     });
 
@@ -476,6 +472,21 @@
         <div style="margin-bottom: 20px;">
             <label class="sf-label">SiliconFlow API Key</label>
             <input type="password" id="sf-cfg-key" class="sf-input" placeholder="sk-..." value="${config.apiKey}">
+        </div>
+
+        <div class="sf-setting-row">
+            <span class="sf-label" style="margin:0">启用悬浮图标</span>
+            <label class="sf-switch">
+                <input type="checkbox" id="sf-cfg-icon" ${config.enableIcon ? 'checked' : ''}>
+                <span class="sf-slider"></span>
+            </label>
+        </div>
+        <div class="sf-setting-row">
+            <span class="sf-label" style="margin:0">显示译文 Tooltip</span>
+            <label class="sf-switch">
+                <input type="checkbox" id="sf-cfg-tooltip" ${config.enableTooltip ? 'checked' : ''}>
+                <span class="sf-slider"></span>
+            </label>
         </div>
         <div style="display:flex; gap:12px; margin-bottom: 20px;">
             <div style="flex:1;">
@@ -629,6 +640,9 @@
                  settingsModal.style.top = "50%";
             }
             document.getElementById("sf-cfg-key").value = config.apiKey;
+            // 同步开关状态到 UI
+            document.getElementById("sf-cfg-icon").checked = config.enableIcon;
+            document.getElementById("sf-cfg-tooltip").checked = config.enableTooltip;
         } else {
             settingsModal.classList.remove("sf-open");
             overlay.classList.remove("sf-open");
@@ -645,10 +659,16 @@
         config.transStyle = document.getElementById("sf-cfg-style").value;
         config.model = document.getElementById("sf-cfg-model").value.trim();
 
+        // 保存开关状态
+        config.enableIcon = document.getElementById("sf-cfg-icon").checked;
+        config.enableTooltip = document.getElementById("sf-cfg-tooltip").checked;
+
         GM_setValue("SF_API_KEY", config.apiKey);
         GM_setValue("SF_TARGET_LANG", config.targetLang);
         GM_setValue("SF_TRANS_STYLE", config.transStyle);
         GM_setValue("SF_MODEL", config.model);
+        GM_setValue("SF_ENABLE_ICON", config.enableIcon);
+        GM_setValue("SF_ENABLE_TOOLTIP", config.enableTooltip);
 
         toggleSettings(false);
         showToast("配置已更新", "success");
@@ -679,6 +699,9 @@
     });
 
     function processSelection(selection) {
+        // 如果禁用了图标，直接不显示
+        if (!config.enableIcon) return;
+
         const text = selection.toString().trim();
         if (text && text.length > 0) {
             selectedText = text;
@@ -830,7 +853,8 @@
         span.setAttribute("data-state", "translated");
 
         span.onmouseenter = (e) => {
-            if (span.getAttribute("data-state") === "translated") {
+            // 如果开启了 Tooltip 且状态为已翻译，则显示
+            if (config.enableTooltip && span.getAttribute("data-state") === "translated") {
                 showTooltip(e, span.getAttribute("data-original"), text);
             }
         };
