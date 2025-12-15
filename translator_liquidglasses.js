@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手 (Liquid Glass Edition )
 // @namespace   http://tampermonkey.net/
-// @version     9.36
-// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（复刻 Shu Ding 算法）。
+// @version     9.37
+// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效（复刻 Shu Ding 算法）。折射率增强版。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -41,6 +41,8 @@
         constructor(targetElement, options = {}) {
             this.target = targetElement;
             this.resolutionScale = options.resolutionScale || 1.0;
+            // 新增：控制折射扭曲强度 (默认为 0.5)
+            this.distortionIntensity = options.distortionIntensity || 0.5;
 
             this.width = options.width || 100;
             this.height = options.height || 100;
@@ -193,7 +195,9 @@
                 }
             }
 
-            maxScale *= 0.5;
+            // 应用配置的折射强度 (此处控制物理扭曲幅度)
+            maxScale *= this.distortionIntensity;
+
             if (maxScale < 0.001) maxScale = 0.001;
 
             const scaleInv = 1.0 / maxScale;
@@ -422,12 +426,16 @@
     smartIcon.innerHTML = `<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>`;
     document.body.appendChild(smartIcon);
 
+    // 🔥 高折射率水晶特效 🔥
     new LiquidElementShader(smartIcon, {
         enableMouse: true,
+        // 💎 核心修改：大幅提高扭曲强度 (1.8)，模拟高折射率玻璃
+        distortionIntensity: 1.8,
         sdfParams: { w: 0.3, h: 0.3, r: 0.6 },
         boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25), 0 -10px 25px inset rgba(0, 0, 0, 0.15)',
-        backdropFilter: 'blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.1)',
-        backgroundColor: 'rgba(255, 255, 255, 0.01)'
+        // 💎 核心修改：增加 Blur (2px) 和 Contrast (1.35) 模拟晶体厚重感
+        backdropFilter: 'blur(2px) contrast(1.35) brightness(1.1) saturate(1.2)',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)'
     });
 
     const tooltip = document.createElement("div");
