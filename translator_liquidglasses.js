@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.51
-// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板输入框溢出问题。手动翻译面板现在可以拖动了。新增关于页面和 iOS 风格过渡动画。加大面板尺寸至680px以消除滚动条，修复UI重叠。修复输入框在部分网站显示为纯白色的问题，并强制恢复 iOS 大圆角风格。
+// @version     9.53
+// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。修复下拉菜单选项重复生成的问题。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -287,12 +287,10 @@
             --sf-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
             --sf-glass-border: rgba(255, 255, 255, 0.1);
-            /* 恢复原版不透明度 */
             --sf-panel-bg: rgba(255, 255, 255, 0.75);
             --sf-text-main: #1d1d1f;
             --sf-text-sub: #555555;
             --sf-input-bg: rgba(118, 118, 128, 0.12);
-            /* 调整为80%不透明的白色，保留玻璃感 */
             --sf-input-focus-bg: rgba(255, 255, 255, 0.8);
             --sf-icon-bg: rgba(255, 255, 255, 0.95);
 
@@ -317,7 +315,7 @@
             }
         }
 
-        /* --- Manual Panel Styles --- */
+        /* --- Panel Styles --- */
         #sf-manual-panel {
             position: fixed; top: 50%; left: 50%; width: 500px; max-width: 90vw;
             border: 1px solid var(--sf-glass-border);
@@ -332,30 +330,26 @@
 
         .sf-manual-textarea {
             width: 100%; min-height: 100px; max-height: 300px; resize: vertical;
-            padding: 16px; border: none; background: var(--sf-input-bg);
+            padding: 12px 14px !important; border: none; background: var(--sf-input-bg);
             color: var(--sf-text-main); border-radius: 16px;
-            font-size: 16px; line-height: 1.5; outline: none; transition: all 0.2s;
+            font-size: 16px; outline: none; transition: all 0.2s;
             font-family: var(--sf-font);
             box-sizing: border-box !important;
-            margin: 0 !important;
-            max-width: 100%;
+            margin: 0 !important; max-width: 100%;
+            line-height: 1.5 !important;
         }
         .sf-manual-textarea:focus { background: var(--sf-input-focus-bg); box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2); }
-        .sf-manual-textarea.sf-output {
-            background: rgba(0,0,0,0.03); cursor: text;
-        }
+        .sf-manual-textarea.sf-output { background: rgba(0,0,0,0.03); cursor: text; }
 
         .sf-panel-controls { display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; }
         .sf-kbd-hint { font-size: 12px; color: var(--sf-text-sub); opacity: 0.7; }
         .sf-kbd { background: rgba(128,128,128,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
 
-
         #sf-smart-icon {
             position: absolute; width: 38px; height: 38px; border-radius: 12px; cursor: pointer; z-index: 2147483647;
             display: none; align-items: center; justify-content: center; border: none; user-select: none;
             transform-origin: center center; transition: opacity 0.2s, transform 0.2s var(--sf-ease-out-expo);
-            will-change: transform, left, top;
-            box-sizing: border-box;
+            will-change: transform, left, top; box-sizing: border-box;
         }
         #sf-smart-icon.sf-pop-in { animation: sf-spring-in 0.6s var(--sf-ease-spring) forwards; }
         #sf-smart-icon.sf-pop-out { animation: sf-pop-out 0.25s var(--sf-ease-out-expo) forwards; pointer-events: none; }
@@ -378,36 +372,21 @@
             opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none;
             transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo);
             -webkit-font-smoothing: antialiased; box-sizing: border-box !important;
-            overflow: hidden; padding: 0 !important; /* Remove padding to allow full-width views */
+            overflow: hidden; padding: 0 !important;
         }
         #sf-settings-modal.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
 
-        /* --- iOS View Transitions Styles --- */
-        #sf-view-container {
-            position: relative; width: 100%; height: 680px; /* 增加高度至680px以彻底消除滚动条 */
-            overflow: hidden;
-        }
+        #sf-view-container { position: relative; width: 100%; height: 680px; overflow: hidden; }
 
         .sf-view {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            padding: 24px 28px;
-            padding-bottom: 60px; /* 增加底部padding，防止内容与右下角按钮重叠 */
-            box-sizing: border-box;
-            transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
-            background: transparent;
-            overflow-y: auto;
-            /* Hide scrollbar but allow scrolling */
-            scrollbar-width: none; /* Firefox */
-            -ms-overflow-style: none; /* IE 10+ */
+            padding: 24px 28px; padding-bottom: 60px;
+            box-sizing: border-box; transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+            background: transparent; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;
         }
-        .sf-view::-webkit-scrollbar {
-            display: none; /* Chrome/Safari/Webkit */
-        }
-
+        .sf-view::-webkit-scrollbar { display: none; }
         .sf-view-main { transform: translateX(0); }
         .sf-view-info { transform: translateX(100%); }
-
-        /* When modal is in "Info" mode */
         #sf-settings-modal.sf-show-info .sf-view-main { transform: translateX(-30%); opacity: 0; pointer-events: none; }
         #sf-settings-modal.sf-show-info .sf-view-info { transform: translateX(0); }
 
@@ -420,13 +399,8 @@
             cursor: pointer; opacity: 0.6; transition: all 0.2s;
         }
         .sf-info-icon-btn:hover { opacity: 1; border-color: var(--sf-primary); color: var(--sf-primary); transform: scale(1.1); }
-
-        .sf-back-btn {
-            cursor: pointer; color: var(--sf-primary); font-size: 15px; font-weight: 500;
-            display: flex; align-items: center; transition: opacity 0.2s;
-        }
+        .sf-back-btn { cursor: pointer; color: var(--sf-primary); font-size: 15px; font-weight: 500; display: flex; align-items: center; transition: opacity 0.2s; }
         .sf-back-btn:hover { opacity: 0.7; }
-
         .sf-info-content { text-align: center; padding-top: 20px; }
         .sf-app-logo {
             width: 64px; height: 64px; background: linear-gradient(135deg, #007AFF, #5856D6);
@@ -437,43 +411,84 @@
         .sf-info-item { margin-bottom: 8px; color: var(--sf-text-sub); font-size: 13px; }
         .sf-info-val { color: var(--sf-text-main); font-weight: 600; }
 
-        /* --- Rest of existing styles --- */
         #sf-settings-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.15); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 2147483646; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
         #sf-settings-overlay.sf-open { opacity: 1; pointer-events: auto; }
         .sf-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; cursor: grab; box-sizing: border-box; }
-
-        .sf-title {
-            margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.4px;
-            color: var(--sf-text-main) !important;
-            /* 删除了 text-shadow 光晕 */
-        }
-
-        /* 新增：强制信息页标题颜色，防止被网页全局样式污染（变黑） */
-        .sf-info-title {
-            color: var(--sf-text-main) !important;
-        }
-
+        .sf-title { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.4px; color: var(--sf-text-main) !important; }
+        .sf-info-title { color: var(--sf-text-main) !important; }
         .sf-greeting { font-size: 13px; color: var(--sf-text-sub); font-weight: 500; margin-top: 2px; }
         .sf-label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: var(--sf-text-sub); letter-spacing: -0.2px; }
 
-        /* 修复：使用 !important 强制应用玻璃样式，防止被网页白色背景覆盖，并加大圆角 */
+        /* --- 核心修复：输入框样式强化 --- */
         .sf-input, .sf-select {
-            width: 100%; padding: 12px 14px;
+            width: 100%; padding: 10px 14px !important;
             border: 1px solid transparent !important;
             background: var(--sf-input-bg) !important;
             color: var(--sf-text-main) !important;
-            border-radius: 16px !important; /* 加大圆角至16px */
+            border-radius: 16px !important;
             font-size: 15px; outline: none; transition: all 0.2s;
-            font-family: var(--sf-font); font-weight: 500; box-sizing: border-box !important; margin: 0;
+            font-family: var(--sf-font); font-weight: 500;
+            box-sizing: border-box !important; margin: 0;
+            /* 强制高度和行高，防止文字被遮挡 */
+            min-height: 46px !important;
+            line-height: 1.6 !important;
+            height: auto !important;
         }
-
         .sf-input:focus, .sf-select:focus {
             background: var(--sf-input-focus-bg) !important;
             box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
             transform: scale(1.01);
         }
 
-        .sf-select option { background-color: var(--sf-option-bg); }
+        /* --- 自定义下拉菜单 (模拟 iOS 效果) --- */
+        .sf-custom-select-trigger {
+            display: flex; align-items: center; justify-content: space-between;
+            width: 100%; padding: 10px 14px;
+            background: var(--sf-input-bg) !important;
+            border-radius: 16px;
+            color: var(--sf-text-main); font-size: 15px; font-weight: 500;
+            cursor: pointer; transition: 0.2s;
+            box-sizing: border-box;
+            min-height: 46px; /* 确保点击区域足够大且文字不被切 */
+            user-select: none;
+        }
+        .sf-custom-select-trigger:hover { background: var(--sf-input-focus-bg) !important; }
+        .sf-custom-select-trigger span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sf-custom-select-trigger::after {
+            content: ''; border: 5px solid transparent; border-top-color: var(--sf-text-sub);
+            margin-left: 8px; transform: translateY(2px); opacity: 0.6; transition: transform 0.2s;
+        }
+        .sf-custom-select-trigger.active::after { transform: rotate(180deg) translateY(2px); }
+
+        /* 下拉菜单弹出层 (Fixed 定位以突破 Modal 的 overflow:hidden) */
+        .sf-select-popup {
+            position: fixed; z-index: 2147483648;
+            background: var(--sf-panel-bg);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid var(--sf-glass-border);
+            border-radius: 16px;
+            padding: 6px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.1);
+            opacity: 0; transform: scale(0.9); pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; flex-direction: column; gap: 4px;
+            max-height: 300px; overflow-y: auto;
+            box-sizing: border-box;
+        }
+        .sf-select-popup::-webkit-scrollbar { width: 0; height: 0; display: none; }
+        .sf-select-popup.sf-open { opacity: 1; transform: scale(1); pointer-events: auto; }
+        .sf-select-option {
+            padding: 10px 12px; border-radius: 10px; cursor: pointer;
+            font-size: 14px; color: var(--sf-text-main); font-family: var(--sf-font);
+            display: flex; align-items: center; justify-content: space-between;
+            transition: background 0.2s;
+            -webkit-font-smoothing: antialiased;
+        }
+        .sf-select-option:hover { background: rgba(0, 122, 255, 0.1); }
+        .sf-select-option.selected { background: var(--sf-primary); color: white; }
+        .sf-select-option.selected::after { content: '✓'; font-weight: bold; font-size: 12px; }
+
         .sf-btn { width: 100%; padding: 12px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 16px; font-family: var(--sf-font); transition: all 0.2s var(--sf-ease-out-expo); position: relative; overflow: hidden; box-sizing: border-box !important; }
         .sf-btn-sm { width: auto; padding: 8px 16px; font-size: 14px; border-radius: 8px; }
         .sf-btn-primary { background: var(--sf-primary); color: white; }
@@ -485,51 +500,21 @@
         .sf-close:hover { background: rgba(142, 142, 147, 0.3); color: var(--sf-text-main); transform: rotate(90deg); }
 
         .sf-tooltip {
-            position: fixed;
-            border: 1px solid rgba(255,255,255,0.15);
-            color: var(--sf-tooltip-text);
-            padding: 12px 16px;
-            border-radius: 24px;
-            font-size: 13px; line-height: 1.5; max-width: 300px;
-            z-index: 2147483647;
-            font-family: var(--sf-font);
-            opacity: 0; transform: scale(0.8);
-            pointer-events: none;
-            transition: opacity 0.2s, transform 0.4s var(--sf-ease-spring);
-            -webkit-font-smoothing: antialiased;
-            box-sizing: border-box;
+            position: fixed; border: 1px solid rgba(255,255,255,0.15); color: var(--sf-tooltip-text); padding: 12px 16px; border-radius: 24px; font-size: 13px; line-height: 1.5; max-width: 300px; z-index: 2147483647; font-family: var(--sf-font); opacity: 0; transform: scale(0.8); pointer-events: none; transition: opacity 0.2s, transform 0.4s var(--sf-ease-spring); -webkit-font-smoothing: antialiased; box-sizing: border-box;
         }
         .sf-tooltip.sf-show { opacity: 1; transform: scale(1) translateY(0) !important; pointer-events: auto; }
-
-        .sf-tooltip-arrow {
-            position: absolute; width: 12px; height: 12px;
-            background: var(--sf-tooltip-bg-dark);
-            transform: rotate(45deg); border-radius: 2px;
-        }
+        .sf-tooltip-arrow { position: absolute; width: 12px; height: 12px; background: var(--sf-tooltip-bg-dark); transform: rotate(45deg); border-radius: 2px; }
         .sf-tooltip.sf-top .sf-tooltip-arrow { bottom: -6px; left: 16px; border-bottom: 1px solid rgba(255,255,255,0.15); border-right: 1px solid rgba(255,255,255,0.15); }
         .sf-tooltip.sf-bottom .sf-tooltip-arrow { top: -6px; left: 16px; border-top: 1px solid rgba(255,255,255,0.15); border-left: 1px solid rgba(255,255,255,0.15); }
 
-        .sf-action-btn {
-            margin-top: 8px; width: 100%;
-            background: rgba(255,255,255,0.1); border: none; color: var(--sf-tooltip-text);
-            padding: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;
-            transition: background 0.2s;
-            box-sizing: border-box;
-        }
+        .sf-action-btn { margin-top: 8px; width: 100%; background: rgba(255,255,255,0.1); border: none; color: var(--sf-tooltip-text); padding: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.2s; box-sizing: border-box; }
         .sf-action-btn:hover { background: rgba(255,255,255,0.2); }
         .sf-action-btn:active { background: rgba(255,255,255,0.05); transform: scale(0.96); }
 
-        .sf-toast {
-            border: 1px solid var(--sf-glass-border); color: #1d1d1f; padding: 12px 28px; border-radius: 50px;
-            font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
-            opacity: 0; transform: translateY(-30px) scale(0.9); transition: all 0.5s var(--sf-ease-spring);
-            -webkit-font-smoothing: antialiased; z-index: 2147483648;
-            box-sizing: border-box;
-        }
+        .sf-toast { border: 1px solid var(--sf-glass-border); color: #1d1d1f; padding: 12px 28px; border-radius: 50px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px; opacity: 0; transform: translateY(-30px) scale(0.9); transition: all 0.5s var(--sf-ease-spring); -webkit-font-smoothing: antialiased; z-index: 2147483648; box-sizing: border-box; }
         .sf-toast.sf-show { opacity: 1; transform: translateY(0) scale(1); }
         .sf-toast.sf-shake { animation: sf-shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 
-        /* --- iOS Toggle Switch Styles --- */
         .sf-setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; box-sizing: border-box; }
         .sf-switch { position: relative; display: inline-block; width: 50px; height: 30px; box-sizing: border-box; }
         .sf-switch input { opacity: 0; width: 0; height: 0; }
@@ -622,10 +607,12 @@
                         <span class="sf-slider"></span>
                     </label>
                 </div>
+                <!-- 优化布局：左右分栏，避免挤压 -->
                 <div style="display:flex; gap:12px; margin-bottom: 20px;">
                     <div style="flex:1;">
                         <label class="sf-label">目标语言</label>
-                        <select id="sf-cfg-lang" class="sf-select">
+                        <!-- 原生 Select 隐藏，JS 会生成自定义 UI -->
+                        <select id="sf-cfg-lang" class="sf-select" style="display:none">
                             <option value="简体中文">简体中文</option>
                             <option value="English">English</option>
                             <option value="日本語">日本語</option>
@@ -636,7 +623,7 @@
                     </div>
                     <div style="flex:1;">
                         <label class="sf-label">风格</label>
-                        <select id="sf-cfg-style" class="sf-select">
+                        <select id="sf-cfg-style" class="sf-select" style="display:none">
                             <option value="daily">☕ 日常</option>
                             <option value="academic">🎓 学术</option>
                             <option value="reading">📖 阅读</option>
@@ -661,7 +648,7 @@
                 <div class="sf-info-icon-btn" id="sf-to-info">i</div>
             </div>
 
-            <!-- 🔵 关于信息页面 (初始隐藏在右侧) -->
+            <!-- 🔵 关于信息页面 -->
             <div class="sf-view sf-view-info">
                 <div class="sf-header-row" style="margin-bottom:12px;">
                     <div class="sf-back-btn" id="sf-back-main">‹ 设置</div>
@@ -670,9 +657,8 @@
                 </div>
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
-                    <!-- 添加 class="sf-info-title" 以应用强制颜色样式 -->
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.51</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.53</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
@@ -689,7 +675,7 @@
                     </p>
 
                     <div style="margin-top:24px; font-size:11px; color:var(--sf-text-sub); opacity:0.6;">
-                         Design by WangPan © 2025
+                          Design by WangPan © 2025
                     </div>
                 </div>
             </div>
@@ -697,6 +683,7 @@
     `;
     document.body.appendChild(settingsModal);
 
+    // 应用设置面板的 Liquid Glass 特效
     new LiquidElementShader(settingsModal, {
         sdfParams: { w: 0.48, h: 0.48, r: 0.05 },
         boxShadow: `0 20px 50px -8px rgba(0,0,0,0.2), 0 -6px 20px inset rgba(255, 255, 255, 0.4), 0 2px 15px inset rgba(0,0,0,0.1)`,
@@ -704,8 +691,7 @@
         backgroundColor: 'var(--sf-panel-bg)'
     });
 
-    // 3. ✨ 新增：手动翻译面板 ✨
-    // [修改注]：在 sf-header-row 中添加了 id="sf-manual-drag-handle" 和 cursor: move 样式
+    // 3. ✨ 手动翻译面板 ✨
     const manualPanel = document.createElement("div");
     manualPanel.id = "sf-manual-panel";
     manualPanel.innerHTML = `
@@ -723,15 +709,137 @@
     `;
     document.body.appendChild(manualPanel);
 
-    // 为手动面板应用同样的 Liquid Shader
     new LiquidElementShader(manualPanel, {
-        enableMouse: true, // 允许鼠标互动光效
-        distortionIntensity: 1.2, // 稍微降低一点畸变以免影响输入
+        enableMouse: true,
+        distortionIntensity: 1.2,
         sdfParams: { w: 0.48, h: 0.48, r: 0.06 },
         boxShadow: `0 20px 60px -8px rgba(0,0,0,0.3), 0 -4px 15px inset rgba(255, 255, 255, 0.5)`,
         backdropFilter: 'blur(12px) contrast(1.1) brightness(1.1) saturate(1.3)',
         backgroundColor: 'var(--sf-panel-bg)'
     });
+
+    // --- 🎮 iOS 风格下拉菜单逻辑 ---
+    // 这个函数会找到页面上隐藏的原生 select，并在其位置生成一个漂亮的 Trigger
+    // 点击 Trigger 会在 body 根节点挂载一个 Fixed 定位的 Popup，避免被 Modal 遮挡
+    function initCustomSelects() {
+        const selects = ['sf-cfg-lang', 'sf-cfg-style'];
+        selects.forEach(id => {
+            const originalSelect = document.getElementById(id);
+            if (!originalSelect) return;
+
+            // Prevent Duplicate: Check if previous element is our trigger
+            // 防止重复生成：检查前一个元素是否已经是我们的触发器
+            let trigger = originalSelect.previousElementSibling;
+            let isNew = false;
+
+            if (!trigger || !trigger.classList.contains('sf-custom-select-trigger')) {
+                isNew = true;
+                // 创建触发器 UI
+                trigger = document.createElement('div');
+                trigger.className = 'sf-custom-select-trigger';
+                trigger.innerHTML = `<span></span>`; // 这里的文字后续填充
+                originalSelect.parentNode.insertBefore(trigger, originalSelect);
+            }
+
+            // 更新触发器文字
+            const updateTrigger = () => {
+                const selectedOption = originalSelect.options[originalSelect.selectedIndex];
+                if (selectedOption) trigger.querySelector('span').innerText = selectedOption.text;
+            };
+
+            // 初始化/重置文字
+            originalSelect.value = id === 'sf-cfg-lang' ? config.targetLang : config.transStyle;
+            updateTrigger();
+
+            // 点击触发器 (仅在新创建时绑定)
+            if (isNew) {
+                trigger.onclick = (e) => {
+                    e.stopPropagation();
+                    // 如果已经有打开的 popup，先关闭
+                    closeAllPopups();
+
+                    trigger.classList.add('active');
+                    showSelectPopup(trigger, originalSelect, updateTrigger);
+                };
+            }
+        });
+    }
+
+    let activePopup = null;
+    let activeTrigger = null;
+
+    function showSelectPopup(trigger, select, updateCallback) {
+        const rect = trigger.getBoundingClientRect();
+        const popup = document.createElement('div');
+        popup.className = 'sf-select-popup';
+
+        // 生成选项
+        Array.from(select.options).forEach(opt => {
+            const el = document.createElement('div');
+            el.className = `sf-select-option ${opt.selected ? 'selected' : ''}`;
+            el.innerText = opt.text;
+            el.onclick = (e) => {
+                e.stopPropagation();
+                select.value = opt.value;
+                // 触发原生 change 事件以防有监听器
+                select.dispatchEvent(new Event('change'));
+                updateCallback();
+                closeAllPopups();
+            };
+            popup.appendChild(el);
+        });
+
+        document.body.appendChild(popup);
+        activePopup = popup;
+        activeTrigger = trigger;
+
+        // 计算位置 (Fixed 定位)
+        popup.style.width = rect.width + 'px';
+        popup.style.left = rect.left + 'px';
+
+        // 智能判断向上还是向下弹出
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const estimatedHeight = Math.min(select.options.length * 40 + 20, 300); // 估算高度
+
+        if (spaceBelow < estimatedHeight && rect.top > estimatedHeight) {
+            // 向上弹出
+            popup.style.top = (rect.top - 8) + 'px';
+            popup.style.transformOrigin = 'bottom center';
+            popup.style.transform = 'translateY(-100%) scale(0.9)';
+            requestAnimationFrame(() => {
+                popup.style.transform = 'translateY(-100%) scale(1)';
+                popup.classList.add('sf-open');
+            });
+        } else {
+            // 向下弹出 (默认)
+            popup.style.top = (rect.bottom + 8) + 'px';
+            popup.style.transformOrigin = 'top center';
+            requestAnimationFrame(() => popup.classList.add('sf-open'));
+        }
+    }
+
+    function closeAllPopups() {
+        if (activePopup) {
+            activePopup.classList.remove('sf-open');
+            const p = activePopup;
+            setTimeout(() => p.remove(), 200);
+            activePopup = null;
+        }
+        if (activeTrigger) {
+            activeTrigger.classList.remove('active');
+            activeTrigger = null;
+        }
+    }
+
+    // 点击其他地方关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (activePopup && !activePopup.contains(e.target)) {
+            closeAllPopups();
+        }
+    });
+
+    // 初始化自定义下拉菜单
+    initCustomSelects();
 
     // --- 🎮 交互逻辑 ---
 
@@ -770,9 +878,6 @@
         if (hour < 18) return "下午好，保持专注 💪";
         return "晚上好，享受生活 🌃";
     }
-
-    document.getElementById("sf-cfg-lang").value = config.targetLang;
-    document.getElementById("sf-cfg-style").value = config.transStyle;
 
     // --- 磁吸逻辑 ---
     let iconBaseX = 0;
@@ -828,7 +933,7 @@
         document.body.style.userSelect = "";
     });
 
-    // --- 🆕 拖拽逻辑 (手动翻译面板) ---
+    // --- 拖拽逻辑 (手动翻译面板) ---
     const manualDragHandle = document.getElementById("sf-manual-drag-handle");
     let isManualDragging = false;
     let manualDragOffsetX = 0, manualDragOffsetY = 0;
@@ -839,8 +944,6 @@
         const rect = manualPanel.getBoundingClientRect();
         manualDragOffsetX = e.clientX - rect.left;
         manualDragOffsetY = e.clientY - rect.top;
-
-        // 关键：重置 transform 以防止拖拽时坐标计算偏移
         manualPanel.style.transform = "scale(1)";
         manualPanel.style.left = rect.left + "px";
         manualPanel.style.top = rect.top + "px";
@@ -852,7 +955,6 @@
         if (!isManualDragging) return;
         let x = e.clientX - manualDragOffsetX;
         let y = e.clientY - manualDragOffsetY;
-        // 简单的边界检查
         if(y < 0) y = 0;
         manualPanel.style.left = x + "px";
         manualPanel.style.top = y + "px";
@@ -871,7 +973,6 @@
         if (show) {
             document.getElementById("sf-greeting-text").innerText = getGreeting();
             settingsModal.classList.add("sf-open");
-            // 重置到主视图
             settingsModal.classList.remove("sf-show-info");
             overlay.classList.add("sf-open");
             document.body.style.overflow = "hidden";
@@ -882,10 +983,14 @@
             document.getElementById("sf-cfg-key").value = config.apiKey;
             document.getElementById("sf-cfg-icon").checked = config.enableIcon;
             document.getElementById("sf-cfg-tooltip").checked = config.enableTooltip;
+
+            // 重新同步下拉菜单状态
+            initCustomSelects();
         } else {
             settingsModal.classList.remove("sf-open");
             overlay.classList.remove("sf-open");
             document.body.style.overflow = "";
+            closeAllPopups();
         }
     }
 
@@ -912,9 +1017,8 @@
     };
 
     document.getElementById("sf-settings-close").onclick = () => toggleSettings(false);
-    overlay.onclick = () => { toggleSettings(false); toggleManualPanel(false); };
+    overlay.onclick = () => { toggleSettings(false); toggleManualPanel(false); closeAllPopups(); };
 
-    // --- 页面切换逻辑 ---
     document.getElementById("sf-to-info").onclick = () => {
         settingsModal.classList.add("sf-show-info");
     };
@@ -930,16 +1034,13 @@
             manualPanel.classList.add("sf-open");
             overlay.classList.add("sf-open");
             document.getElementById("sf-manual-input").focus();
-             // 如果是初次打开（没有 left/top），居中；如果有，保留位置
              if (!manualPanel.style.left) {
                  manualPanel.style.left = "50%";
                  manualPanel.style.top = "50%";
-                 manualPanel.style.transform = "translate(-50%, -50%) scale(1)"; // 初次居中需要 translate
+                 manualPanel.style.transform = "translate(-50%, -50%) scale(1)";
             } else {
-                 manualPanel.style.transform = "scale(1)"; // 之后只需要 scale
+                 manualPanel.style.transform = "scale(1)";
             }
-
-            // 尝试读取剪贴板
              navigator.clipboard.readText().then(text => {
                  if(text && text.trim().length > 0 && document.getElementById("sf-manual-input").value === "") {
                      // 可选：自动粘贴
@@ -1073,7 +1174,8 @@
     document.addEventListener("mouseup", (e) => {
         if (isDragging || isManualDragging) return;
         if (tooltip.contains(e.target)) return;
-        if (manualPanel.contains(e.target)) return; // 忽略手动面板内的点击
+        if (manualPanel.contains(e.target)) return;
+        if (activePopup && activePopup.contains(e.target)) return; // 忽略下拉菜单的点击
         if (smartIcon.contains(e.target) || settingsModal.contains(e.target)) return;
         if (e.altKey) return;
         setTimeout(() => {
@@ -1091,7 +1193,8 @@
 
     document.addEventListener("mousedown", (e) => {
         if (tooltip.contains(e.target)) return;
-        if (manualPanel.contains(e.target)) return; // 忽略手动面板
+        if (manualPanel.contains(e.target)) return;
+        if (activePopup && activePopup.contains(e.target)) return;
         if (!smartIcon.contains(e.target) && !settingsModal.contains(e.target)) {
             setTimeout(() => {
                 if (!window.getSelection().toString().trim()) {
@@ -1126,7 +1229,6 @@
     }
 
     document.addEventListener("keydown", (e) => {
-        // Alt + Z 划词翻译
         if (e.altKey && (e.code === "KeyZ" || e.key === "z" || e.key === "Z")) {
             const selection = window.getSelection();
             if (selection.rangeCount > 0) {
@@ -1143,7 +1245,6 @@
                 }
             }
         }
-        // Alt + X 呼出手动面板
         if (e.altKey && (e.code === "KeyX" || e.key === "x" || e.key === "X")) {
             e.preventDefault();
             const isOpen = manualPanel.classList.contains("sf-open");
