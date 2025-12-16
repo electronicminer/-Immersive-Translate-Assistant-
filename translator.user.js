@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.54
-// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。修复下拉菜单选项重复生成的问题。
+// @version     9.55
+// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -12,8 +12,8 @@
 // @grant       GM_registerMenuCommand
 // @grant       GM_unregisterMenuCommand
 // @grant       GM_setClipboard
-// @updateURL   https://github.com/electronicminer/-Immersive-Translate-Assistant-/raw/main/translator.user.js
-// @downloadURL https://github.com/electronicminer/-Immersive-Translate-Assistant-/raw/main/translator.user.js
+// @updateURL   https://github.com/你的用户名/你的仓库/raw/main/沉浸翻译助手.user.js
+// @downloadURL https://github.com/你的用户名/你的仓库/raw/main/沉浸翻译助手.user.js
 // ==/UserScript==
 
 (function() {
@@ -274,7 +274,8 @@
         transStyle: GM_getValue("SF_TRANS_STYLE", DEFAULTS.TRANS_STYLE),
         apiKey: GM_getValue("SF_API_KEY", ""),
         enableIcon: GM_getValue("SF_ENABLE_ICON", true),
-        enableTooltip: GM_getValue("SF_ENABLE_TOOLTIP", true)
+        enableTooltip: GM_getValue("SF_ENABLE_TOOLTIP", true),
+        onlyTooltip: GM_getValue("SF_ONLY_TOOLTIP", false) // 新增功能：仅显示悬浮窗模式
     };
 
     // --- 🎨 样式注入 (CSS) ---
@@ -359,12 +360,39 @@
         #sf-smart-icon.sf-pop-in svg path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: sf-draw-stroke 0.8s ease-out forwards; }
         #sf-smart-icon:active { transform: scale(0.92) !important; }
 
+        /* 翻译节点样式 */
         .sf-translated-node { background-color: transparent; border-bottom: 1.5px dashed var(--sf-primary); cursor: pointer; border-radius: 4px; padding: 0 2px; display: inline; transition: all 0.2s; position: relative; -webkit-font-smoothing: antialiased; }
         .sf-translated-node[data-state="translated"] { animation: sf-type-settle 0.7s var(--sf-ease-out-expo) forwards, sf-highlight-flash 1s ease-out; }
         .sf-translated-node.sf-switching { opacity: 0; transform: scale(0.96) blur(2px); }
         .sf-translated-node:hover { background-color: rgba(0, 122, 255, 0.1); border-bottom-style: solid; }
         .sf-translated-node.sf-show-original { border-bottom: none !important; filter: none !important; color: inherit !important; background: transparent !important; }
+
+        /* 默认模式 Loading: 隐藏文字，显示骨架屏 */
         .sf-translated-node.sf-loading { color: transparent !important; background: var(--sf-shimmer-bg); background-size: 400% 100%; animation: sf-shimmer-wave 1.4s infinite cubic-bezier(0.23, 1, 0.32, 1); border-radius: 6px; pointer-events: none; border: none; }
+
+        /* 仅悬浮窗模式 Loading: 显示文字，底部 Loading 动画 */
+        .sf-translated-node.sf-loading.sf-tooltip-mode {
+            color: inherit !important;
+            background: transparent !important;
+            animation: none !important;
+            border-bottom: 2px solid var(--sf-primary);
+            opacity: 0.7;
+            animation: sf-pulse-border 1.5s infinite;
+        }
+
+        /* 仅悬浮窗模式 Translated: 虚线，无背景 */
+        .sf-translated-node.sf-tooltip-mode[data-state="translated-tooltip-only"] {
+            border-bottom: 1.5px dashed var(--sf-success);
+            background: transparent !important;
+            color: inherit !important;
+            filter: none !important;
+            transform: none !important;
+            animation: none !important;
+        }
+        .sf-translated-node.sf-tooltip-mode:hover {
+            background-color: rgba(52, 199, 89, 0.1) !important;
+        }
+
         .sf-translated-node.sf-error { color: var(--sf-error) !important; border-bottom: 1.5px solid var(--sf-error); background: rgba(255, 59, 48, 0.08); }
 
         #sf-settings-modal {
@@ -533,6 +561,7 @@
         @keyframes sf-shimmer-wave { 0% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         @keyframes sf-shine-pass { 0% { left: -100%; opacity: 0; } 50% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
         @keyframes sf-shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-3px, 0, 0); } 40%, 60% { transform: translate3d(3px, 0, 0); } }
+        @keyframes sf-pulse-border { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
     `;
 
     const styleSheet = document.createElement("style");
@@ -603,12 +632,20 @@
                     </label>
                 </div>
                 <div class="sf-setting-row">
-                    <span class="sf-label" style="margin:0">显示译文 Tooltip</span>
+                    <span class="sf-label" style="margin:0">显示原文/译文 Tooltip</span>
                     <label class="sf-switch">
                         <input type="checkbox" id="sf-cfg-tooltip" ${config.enableTooltip ? 'checked' : ''}>
                         <span class="sf-slider"></span>
                     </label>
                 </div>
+                <div class="sf-setting-row">
+                    <span class="sf-label" style="margin:0">仅显示悬浮窗 (不替换)</span>
+                    <label class="sf-switch">
+                        <input type="checkbox" id="sf-cfg-only-tooltip" ${config.onlyTooltip ? 'checked' : ''}>
+                        <span class="sf-slider"></span>
+                    </label>
+                </div>
+
                 <!-- 优化布局：左右分栏，避免挤压 -->
                 <div style="display:flex; gap:12px; margin-bottom: 20px;">
                     <div style="flex:1;">
@@ -660,7 +697,7 @@
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.53</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.54</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
@@ -748,7 +785,7 @@
                 const selectedOption = originalSelect.options[originalSelect.selectedIndex];
                 if (selectedOption) trigger.querySelector('span').innerText = selectedOption.text;
             };
-            
+
             // 初始化/重置文字
             originalSelect.value = id === 'sf-cfg-lang' ? config.targetLang : config.transStyle;
             updateTrigger();
@@ -798,7 +835,7 @@
         // 计算位置 (Fixed 定位)
         popup.style.width = rect.width + 'px';
         popup.style.left = rect.left + 'px';
-        
+
         // 智能判断向上还是向下弹出
         const spaceBelow = window.innerHeight - rect.bottom;
         const estimatedHeight = Math.min(select.options.length * 40 + 20, 300); // 估算高度
@@ -985,9 +1022,10 @@
             document.getElementById("sf-cfg-key").value = config.apiKey;
             document.getElementById("sf-cfg-icon").checked = config.enableIcon;
             document.getElementById("sf-cfg-tooltip").checked = config.enableTooltip;
-            
+            document.getElementById("sf-cfg-only-tooltip").checked = config.onlyTooltip;
+
             // 重新同步下拉菜单状态
-            initCustomSelects(); 
+            initCustomSelects();
         } else {
             settingsModal.classList.remove("sf-open");
             overlay.classList.remove("sf-open");
@@ -1006,6 +1044,7 @@
         config.model = document.getElementById("sf-cfg-model").value.trim();
         config.enableIcon = document.getElementById("sf-cfg-icon").checked;
         config.enableTooltip = document.getElementById("sf-cfg-tooltip").checked;
+        config.onlyTooltip = document.getElementById("sf-cfg-only-tooltip").checked;
 
         GM_setValue("SF_API_KEY", config.apiKey);
         GM_setValue("SF_TARGET_LANG", config.targetLang);
@@ -1013,6 +1052,7 @@
         GM_setValue("SF_MODEL", config.model);
         GM_setValue("SF_ENABLE_ICON", config.enableIcon);
         GM_setValue("SF_ENABLE_TOOLTIP", config.enableTooltip);
+        GM_setValue("SF_ONLY_TOOLTIP", config.onlyTooltip);
 
         toggleSettings(false);
         showToast("配置已更新", "success");
@@ -1214,6 +1254,12 @@
 
         const span = document.createElement("span");
         span.className = "sf-translated-node sf-loading";
+
+        // 如果开启了仅悬浮窗模式，添加特殊样式类
+        if (config.onlyTooltip) {
+            span.classList.add("sf-tooltip-mode");
+        }
+
         span.innerText = selectedText;
         span.setAttribute("data-original", selectedText);
         span.setAttribute("data-state", "loading");
@@ -1304,80 +1350,161 @@
 
     function updateUISuccess(span, text) {
         span.classList.remove("sf-loading");
-        span.innerText = text;
-        span.setAttribute("data-translated", text);
-        span.setAttribute("data-state", "translated");
 
-        span.onmouseenter = (e) => {
-            if (config.enableTooltip && span.getAttribute("data-state") === "translated") {
-                showTooltip(e, span.getAttribute("data-original"), text);
-            }
-        };
-        span.onmouseleave = () => setTimeout(() => { if (!tooltip.matches(':hover')) hideTooltip(); }, 100);
+        if (config.onlyTooltip) {
+            // --- 仅悬浮窗模式 ---
+            // 不替换文本，原文保留在 innerText
+            span.setAttribute("data-translated", text);
+            span.setAttribute("data-state", "translated-tooltip-only");
 
-        span.onclick = async (e) => {
-            e.stopPropagation();
-            hideTooltip();
-            span.classList.add('sf-switching');
-            await new Promise(r => setTimeout(r, 200));
-            const isTrans = span.getAttribute("data-state") === "translated";
-            if (isTrans) {
-                span.innerText = span.getAttribute("data-original");
-                span.setAttribute("data-state", "original");
-                span.classList.add("sf-show-original");
-            } else {
-                span.innerText = span.getAttribute("data-translated");
-                span.setAttribute("data-state", "translated");
-                span.classList.remove("sf-show-original");
-            }
-            span.classList.remove('sf-switching');
-        };
+            // 立即弹出悬浮窗显示译文
+            showTooltip(span, "译文", text, text);
+
+            // 鼠标交互：显示译文
+            span.onmouseenter = () => showTooltip(span, "译文", text, text);
+            span.onmouseleave = () => setTimeout(() => { if (!tooltip.matches(':hover')) hideTooltip(); }, 100);
+
+            // 点击交互：也可以显示译文（或者执行其他操作）
+            span.onclick = (e) => {
+                 e.stopPropagation();
+                 showTooltip(span, "译文", text, text);
+            };
+
+        } else {
+            // --- 默认模式 (替换原文) ---
+            span.innerText = text;
+            span.setAttribute("data-translated", text);
+            span.setAttribute("data-state", "translated");
+
+            // 鼠标交互：显示原文
+            span.onmouseenter = (e) => {
+                if (config.enableTooltip && span.getAttribute("data-state") === "translated") {
+                    // 参数：目标，标题，内容，复制内容(这里复制的是译文，即当前显示的文本)
+                    showTooltip(e, "原文", span.getAttribute("data-original"), text);
+                }
+            };
+            span.onmouseleave = () => setTimeout(() => { if (!tooltip.matches(':hover')) hideTooltip(); }, 100);
+
+            // 点击交互：切换原文/译文
+            span.onclick = async (e) => {
+                e.stopPropagation();
+                hideTooltip();
+                span.classList.add('sf-switching');
+                await new Promise(r => setTimeout(r, 200));
+                const isTrans = span.getAttribute("data-state") === "translated";
+                if (isTrans) {
+                    span.innerText = span.getAttribute("data-original");
+                    span.setAttribute("data-state", "original");
+                    span.classList.add("sf-show-original");
+                } else {
+                    span.innerText = span.getAttribute("data-translated");
+                    span.setAttribute("data-state", "translated");
+                    span.classList.remove("sf-show-original");
+                }
+                span.classList.remove('sf-switching');
+            };
+        }
     }
 
     function updateUIError(span, msg) {
         span.classList.remove("sf-loading");
         span.classList.add("sf-error");
-        span.innerText = `[${msg}]`;
+        // 错误状态下总是显示错误信息，点击恢复原文
+        const originalText = span.getAttribute("data-original");
+        if (!config.onlyTooltip) {
+             span.innerText = `[${msg}]`;
+        }
         showToast("翻译请求失败", "error");
         span.onclick = (e) => {
             e.stopPropagation();
-            span.innerText = span.getAttribute("data-original");
-            span.className = "";
+            span.innerText = originalText;
+            span.className = ""; // 移除所有样式，变回普通文本
+            // 这里可以做一个更优雅的“解包”逻辑，把 span 替换回纯文本节点，不过清空 class 视觉上也差不多
         };
     }
 
-    function showTooltip(e, original, translated) {
+    /**
+     * 显示 Tooltip
+     * @param {MouseEvent|HTMLElement} target - 触发源，可以是鼠标事件对象，也可以是 DOM 元素
+     * @param {string} label - 标题 (Original/译文)
+     * @param {string} content - 显示的内容
+     * @param {string} copyContent - 复制按钮复制的内容
+     */
+    function showTooltip(target, label, content, copyContent) {
+        if (!config.enableTooltip && !config.onlyTooltip) return;
+
         tooltip.innerHTML = `
             <div class="sf-tooltip-arrow"></div>
-            <div style="margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--sf-tooltip-sub); font-weight:700;">Original</div>
-            <div style="font-weight:500; font-size:14px; margin-bottom:12px; line-height:1.4; color:var(--sf-tooltip-text);">${original}</div>
-            <button class="sf-action-btn" id="sf-btn-copy">复制译文</button>
+            <div style="margin-bottom:4px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--sf-tooltip-sub); font-weight:700;">${label}</div>
+            <div style="font-weight:500; font-size:14px; margin-bottom:12px; line-height:1.4; color:var(--sf-tooltip-text);">${content}</div>
+            <button class="sf-action-btn" id="sf-btn-copy">复制</button>
         `;
 
+        // 计算定位坐标
+        let clientX, clientY;
         const rect = tooltip.getBoundingClientRect();
-        let left = e.clientX - 20;
+        let targetRect = null;
 
-        const spaceBelow = window.innerHeight - e.clientY;
-        const tooltipHeight = 150;
-
-        let top;
-        if (spaceBelow < tooltipHeight + 20) {
-            top = e.clientY - rect.height - 10;
-            if (top < 10) top = e.clientY + 20;
-            else {
-                tooltip.classList.remove('sf-bottom');
-                tooltip.classList.add('sf-top');
-                tooltip.style.transformOrigin = "bottom left";
-                top = e.clientY - 160;
-            }
+        if (target instanceof HTMLElement) {
+            // 如果传入的是 DOM 元素 (自动弹出模式)
+            targetRect = target.getBoundingClientRect();
+            clientX = targetRect.left + targetRect.width / 2;
+            clientY = targetRect.bottom;
+        } else if (target.clientX !== undefined) {
+            // 如果传入的是鼠标事件
+            clientX = target.clientX;
+            clientY = target.clientY;
         } else {
-            top = e.clientY + 24;
-            tooltip.classList.remove('sf-top');
-            tooltip.classList.add('sf-bottom');
-            tooltip.style.transformOrigin = "top left";
+            return;
         }
 
+        let left = clientX - 20;
+        // 如果是元素触发，让 tooltip 居中对齐元素
+        if (target instanceof HTMLElement) {
+             left = clientX - rect.width / 2;
+        }
+
+        const spaceBelow = window.innerHeight - clientY;
+        const tooltipHeight = 150; // 估算高度
+
+        let top;
+        // 智能判断上下位置
+        // 如果是元素触发，优先显示在下方，除非下方空间不足
+        if (target instanceof HTMLElement) {
+             if (spaceBelow < tooltipHeight + 20) {
+                 // 上方显示
+                 top = targetRect.top - rect.height - 10;
+                 tooltip.classList.remove('sf-bottom');
+                 tooltip.classList.add('sf-top');
+                 tooltip.style.transformOrigin = "bottom center";
+             } else {
+                 // 下方显示
+                 top = targetRect.bottom + 10;
+                 tooltip.classList.remove('sf-top');
+                 tooltip.classList.add('sf-bottom');
+                 tooltip.style.transformOrigin = "top center";
+             }
+        } else {
+            // 鼠标触发的原有逻辑
+            if (spaceBelow < tooltipHeight + 20) {
+                top = clientY - rect.height - 10;
+                if (top < 10) top = clientY + 20;
+                else {
+                    tooltip.classList.remove('sf-bottom');
+                    tooltip.classList.add('sf-top');
+                    tooltip.style.transformOrigin = "bottom left";
+                }
+            } else {
+                top = clientY + 24;
+                tooltip.classList.remove('sf-top');
+                tooltip.classList.add('sf-bottom');
+                tooltip.style.transformOrigin = "top left";
+            }
+        }
+
+        // 边界检查
         if (left + rect.width > window.innerWidth) left = window.innerWidth - rect.width - 10;
+        if (left < 10) left = 10;
 
         tooltip.style.left = left + "px";
         tooltip.style.top = top + "px";
@@ -1385,7 +1512,7 @@
 
         document.getElementById("sf-btn-copy").onclick = (evt) => {
             evt.stopPropagation();
-            GM_setClipboard(translated);
+            GM_setClipboard(copyContent);
             showToast("已复制", "copy");
             hideTooltip();
         };
