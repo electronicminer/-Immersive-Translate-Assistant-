@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name        沉浸翻译助手 (UI修复版)
+// @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.42
-// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板输入框溢出问题。快捷键调整为 Alt+X。
+// @version     9.51
+// @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板输入框溢出问题。手动翻译面板现在可以拖动了。新增关于页面和 iOS 风格过渡动画。加大面板尺寸至680px以消除滚动条，修复UI重叠。修复输入框在部分网站显示为纯白色的问题，并强制恢复 iOS 大圆角风格。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -287,11 +287,13 @@
             --sf-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
             --sf-glass-border: rgba(255, 255, 255, 0.1);
+            /* 恢复原版不透明度 */
             --sf-panel-bg: rgba(255, 255, 255, 0.75);
             --sf-text-main: #1d1d1f;
             --sf-text-sub: #555555;
             --sf-input-bg: rgba(118, 118, 128, 0.12);
-            --sf-input-focus-bg: rgba(255, 255, 255, 1);
+            /* 调整为80%不透明的白色，保留玻璃感 */
+            --sf-input-focus-bg: rgba(255, 255, 255, 0.8);
             --sf-icon-bg: rgba(255, 255, 255, 0.95);
 
             --sf-tooltip-text: #ffffff;
@@ -324,7 +326,7 @@
             opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none;
             transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo);
             display: flex; flex-direction: column; gap: 16px;
-            box-sizing: border-box !important; /* 修复1：强制容器盒子模型 */
+            box-sizing: border-box !important;
         }
         #sf-manual-panel.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
 
@@ -334,8 +336,8 @@
             color: var(--sf-text-main); border-radius: 16px;
             font-size: 16px; line-height: 1.5; outline: none; transition: all 0.2s;
             font-family: var(--sf-font);
-            box-sizing: border-box !important; /* 修复2：强制输入框盒子模型，包含padding */
-            margin: 0 !important; /* 修复3：移除可能继承的margin */
+            box-sizing: border-box !important;
+            margin: 0 !important;
             max-width: 100%;
         }
         .sf-manual-textarea:focus { background: var(--sf-input-focus-bg); box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2); }
@@ -369,16 +371,108 @@
         .sf-translated-node.sf-loading { color: transparent !important; background: var(--sf-shimmer-bg); background-size: 400% 100%; animation: sf-shimmer-wave 1.4s infinite cubic-bezier(0.23, 1, 0.32, 1); border-radius: 6px; pointer-events: none; border: none; }
         .sf-translated-node.sf-error { color: var(--sf-error) !important; border-bottom: 1.5px solid var(--sf-error); background: rgba(255, 59, 48, 0.08); }
 
-        #sf-settings-modal { position: fixed; top: 50%; left: 50%; width: 360px; border: 1px solid var(--sf-glass-border); color: var(--sf-text-main); padding: 24px 28px; border-radius: 20px; z-index: 2147483647; font-family: var(--sf-font); opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none; transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo); -webkit-font-smoothing: antialiased; box-sizing: border-box !important; }
+        #sf-settings-modal {
+            position: fixed; top: 50%; left: 50%; width: 420px; height: auto;
+            border: 1px solid var(--sf-glass-border); color: var(--sf-text-main);
+            border-radius: 20px; z-index: 2147483647; font-family: var(--sf-font);
+            opacity: 0; transform: translate(-50%, -45%) scale(0.96); pointer-events: none;
+            transition: opacity 0.3s ease, transform 0.4s var(--sf-ease-out-expo);
+            -webkit-font-smoothing: antialiased; box-sizing: border-box !important;
+            overflow: hidden; padding: 0 !important; /* Remove padding to allow full-width views */
+        }
         #sf-settings-modal.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+
+        /* --- iOS View Transitions Styles --- */
+        #sf-view-container {
+            position: relative; width: 100%; height: 680px; /* 增加高度至680px以彻底消除滚动条 */
+            overflow: hidden;
+        }
+
+        .sf-view {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 24px 28px;
+            padding-bottom: 60px; /* 增加底部padding，防止内容与右下角按钮重叠 */
+            box-sizing: border-box;
+            transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+            background: transparent;
+            overflow-y: auto;
+            /* Hide scrollbar but allow scrolling */
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE 10+ */
+        }
+        .sf-view::-webkit-scrollbar {
+            display: none; /* Chrome/Safari/Webkit */
+        }
+
+        .sf-view-main { transform: translateX(0); }
+        .sf-view-info { transform: translateX(100%); }
+
+        /* When modal is in "Info" mode */
+        #sf-settings-modal.sf-show-info .sf-view-main { transform: translateX(-30%); opacity: 0; pointer-events: none; }
+        #sf-settings-modal.sf-show-info .sf-view-info { transform: translateX(0); }
+
+        .sf-info-icon-btn {
+            position: absolute; bottom: 20px; right: 20px;
+            width: 24px; height: 24px; border-radius: 50%;
+            border: 1.5px solid var(--sf-text-sub); color: var(--sf-text-sub);
+            display: flex; align-items: center; justify-content: center;
+            font-family: serif; font-style: italic; font-weight: bold; font-size: 14px;
+            cursor: pointer; opacity: 0.6; transition: all 0.2s;
+        }
+        .sf-info-icon-btn:hover { opacity: 1; border-color: var(--sf-primary); color: var(--sf-primary); transform: scale(1.1); }
+
+        .sf-back-btn {
+            cursor: pointer; color: var(--sf-primary); font-size: 15px; font-weight: 500;
+            display: flex; align-items: center; transition: opacity 0.2s;
+        }
+        .sf-back-btn:hover { opacity: 0.7; }
+
+        .sf-info-content { text-align: center; padding-top: 20px; }
+        .sf-app-logo {
+            width: 64px; height: 64px; background: linear-gradient(135deg, #007AFF, #5856D6);
+            border-radius: 16px; margin: 0 auto 16px auto;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 32px; box-shadow: 0 10px 20px rgba(0, 122, 255, 0.3);
+        }
+        .sf-info-item { margin-bottom: 8px; color: var(--sf-text-sub); font-size: 13px; }
+        .sf-info-val { color: var(--sf-text-main); font-weight: 600; }
+
+        /* --- Rest of existing styles --- */
         #sf-settings-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.15); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); z-index: 2147483646; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
         #sf-settings-overlay.sf-open { opacity: 1; pointer-events: auto; }
         .sf-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; cursor: grab; box-sizing: border-box; }
-        .sf-title { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.4px; color: var(--sf-text-main) !important; }
+
+        .sf-title {
+            margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.4px;
+            color: var(--sf-text-main) !important;
+            /* 删除了 text-shadow 光晕 */
+        }
+
+        /* 新增：强制信息页标题颜色，防止被网页全局样式污染（变黑） */
+        .sf-info-title {
+            color: var(--sf-text-main) !important;
+        }
+
         .sf-greeting { font-size: 13px; color: var(--sf-text-sub); font-weight: 500; margin-top: 2px; }
         .sf-label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 13px; color: var(--sf-text-sub); letter-spacing: -0.2px; }
-        .sf-input, .sf-select { width: 100%; padding: 12px 14px; border: none; background: var(--sf-input-bg); color: var(--sf-text-main); border-radius: 10px; font-size: 15px; outline: none; transition: all 0.2s; font-family: var(--sf-font); font-weight: 500; box-sizing: border-box !important; margin: 0; }
-        .sf-input:focus, .sf-select:focus { background: var(--sf-input-focus-bg); box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2); transform: scale(1.01); }
+
+        /* 修复：使用 !important 强制应用玻璃样式，防止被网页白色背景覆盖，并加大圆角 */
+        .sf-input, .sf-select {
+            width: 100%; padding: 12px 14px;
+            border: 1px solid transparent !important;
+            background: var(--sf-input-bg) !important;
+            color: var(--sf-text-main) !important;
+            border-radius: 16px !important; /* 加大圆角至16px */
+            font-size: 15px; outline: none; transition: all 0.2s;
+            font-family: var(--sf-font); font-weight: 500; box-sizing: border-box !important; margin: 0;
+        }
+
+        .sf-input:focus, .sf-select:focus {
+            background: var(--sf-input-focus-bg) !important;
+            box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
+            transform: scale(1.01);
+        }
+
         .sf-select option { background-color: var(--sf-option-bg); }
         .sf-btn { width: 100%; padding: 12px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 16px; font-family: var(--sf-font); transition: all 0.2s var(--sf-ease-out-expo); position: relative; overflow: hidden; box-sizing: border-box !important; }
         .sf-btn-sm { width: auto; padding: 8px 16px; font-size: 14px; border-radius: 8px; }
@@ -495,70 +589,110 @@
     overlay.id = "sf-settings-overlay";
     document.body.appendChild(overlay);
 
-    // 2. 设置面板
+    // 2. 设置面板 (双层视图结构)
     const settingsModal = document.createElement("div");
     settingsModal.id = "sf-settings-modal";
     settingsModal.innerHTML = `
-        <div class="sf-header-row" id="sf-drag-handle">
-            <div>
-                <h3 class="sf-title">翻译助手</h3>
-                <div id="sf-greeting-text" class="sf-greeting">Setting</div>
-            </div>
-            <div class="sf-close">×</div>
-        </div>
-        <div style="margin-bottom: 20px;">
-            <label class="sf-label">SiliconFlow API Key</label>
-            <input type="password" id="sf-cfg-key" class="sf-input" placeholder="sk-..." value="${config.apiKey}">
-        </div>
+        <div id="sf-view-container">
+            <!-- 🟢 主设置页面 -->
+            <div class="sf-view sf-view-main">
+                <div class="sf-header-row" id="sf-drag-handle">
+                    <div>
+                        <h3 class="sf-title">翻译助手</h3>
+                        <div id="sf-greeting-text" class="sf-greeting">Setting</div>
+                    </div>
+                    <div class="sf-close" id="sf-settings-close">×</div>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label class="sf-label">SiliconFlow API Key</label>
+                    <input type="password" id="sf-cfg-key" class="sf-input" placeholder="sk-..." value="${config.apiKey}">
+                </div>
 
-        <div class="sf-setting-row">
-            <span class="sf-label" style="margin:0">启用悬浮图标</span>
-            <label class="sf-switch">
-                <input type="checkbox" id="sf-cfg-icon" ${config.enableIcon ? 'checked' : ''}>
-                <span class="sf-slider"></span>
-            </label>
-        </div>
-        <div class="sf-setting-row">
-            <span class="sf-label" style="margin:0">显示译文 Tooltip</span>
-            <label class="sf-switch">
-                <input type="checkbox" id="sf-cfg-tooltip" ${config.enableTooltip ? 'checked' : ''}>
-                <span class="sf-slider"></span>
-            </label>
-        </div>
-        <div style="display:flex; gap:12px; margin-bottom: 20px;">
-            <div style="flex:1;">
-                <label class="sf-label">目标语言</label>
-                <select id="sf-cfg-lang" class="sf-select">
-                    <option value="简体中文">简体中文</option>
-                    <option value="English">English</option>
-                    <option value="日本語">日本語</option>
-                    <option value="한국어">한국어</option>
-                    <option value="Français">Français</option>
-                    <option value="Deutsch">Deutsch</option>
-                </select>
+                <div class="sf-setting-row">
+                    <span class="sf-label" style="margin:0">启用悬浮图标</span>
+                    <label class="sf-switch">
+                        <input type="checkbox" id="sf-cfg-icon" ${config.enableIcon ? 'checked' : ''}>
+                        <span class="sf-slider"></span>
+                    </label>
+                </div>
+                <div class="sf-setting-row">
+                    <span class="sf-label" style="margin:0">显示译文 Tooltip</span>
+                    <label class="sf-switch">
+                        <input type="checkbox" id="sf-cfg-tooltip" ${config.enableTooltip ? 'checked' : ''}>
+                        <span class="sf-slider"></span>
+                    </label>
+                </div>
+                <div style="display:flex; gap:12px; margin-bottom: 20px;">
+                    <div style="flex:1;">
+                        <label class="sf-label">目标语言</label>
+                        <select id="sf-cfg-lang" class="sf-select">
+                            <option value="简体中文">简体中文</option>
+                            <option value="English">English</option>
+                            <option value="日本語">日本語</option>
+                            <option value="한국어">한국어</option>
+                            <option value="Français">Français</option>
+                            <option value="Deutsch">Deutsch</option>
+                        </select>
+                    </div>
+                    <div style="flex:1;">
+                        <label class="sf-label">风格</label>
+                        <select id="sf-cfg-style" class="sf-select">
+                            <option value="daily">☕ 日常</option>
+                            <option value="academic">🎓 学术</option>
+                            <option value="reading">📖 阅读</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-bottom: 24px;">
+                    <label class="sf-label">模型选择</label>
+                    <input type="text" id="sf-cfg-model" class="sf-input" list="sf-model-list" value="${config.model}" placeholder="选择或输入模型">
+                    <datalist id="sf-model-list">
+                        <option value="Qwen/Qwen2.5-7B-Instruct">Qwen 2.5 7B (极速)</option>
+                        <option value="Qwen/Qwen2.5-72B-Instruct">Qwen 2.5 72B (推荐)</option>
+                        <option value="deepseek-ai/DeepSeek-V3">DeepSeek V3 (最强)</option>
+                        <option value="THUDM/glm-4-9b-chat">GLM-4 9B</option>
+                    </datalist>
+                </div>
+                <button id="sf-save-btn" class="sf-btn sf-btn-primary">保存更改</button>
+                <div style="margin-top:16px; text-align:center;">
+                    <a href="https://cloud.siliconflow.cn/" target="_blank" style="color:var(--sf-primary); font-size:12px; text-decoration:none; opacity:0.8;">获取免费 API Key</a>
+                </div>
+                <!-- ℹ️ 底部右下角的信息按钮 -->
+                <div class="sf-info-icon-btn" id="sf-to-info">i</div>
             </div>
-            <div style="flex:1;">
-                <label class="sf-label">风格</label>
-                <select id="sf-cfg-style" class="sf-select">
-                    <option value="daily">☕ 日常</option>
-                    <option value="academic">🎓 学术</option>
-                    <option value="reading">📖 阅读</option>
-                </select>
+
+            <!-- 🔵 关于信息页面 (初始隐藏在右侧) -->
+            <div class="sf-view sf-view-info">
+                <div class="sf-header-row" style="margin-bottom:12px;">
+                    <div class="sf-back-btn" id="sf-back-main">‹ 设置</div>
+                    <div class="sf-title" style="font-size:17px; position:absolute; left:50%; transform:translateX(-50%)">关于</div>
+                    <div style="width:40px"></div>
+                </div>
+                <div class="sf-info-content">
+                    <div class="sf-app-logo">🌐</div>
+                    <!-- 添加 class="sf-info-title" 以应用强制颜色样式 -->
+                    <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.51</p>
+
+                    <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
+                        <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
+                        <div style="height:1px; background:rgba(128,128,128,0.1); margin:8px 0;"></div>
+                        <div class="sf-info-item">渲染引擎 <span class="sf-info-val" style="float:right">Liquid Glass (JS+Shader)</span></div>
+                        <div style="height:1px; background:rgba(128,128,128,0.1); margin:8px 0;"></div>
+                        <div class="sf-info-item">QQ <span class="sf-info-val" style="float:right">2013248845</span></div>
+                    </div>
+
+                    <p style="font-size:12px; color:var(--sf-text-sub); line-height:1.6; padding:0 8px;">
+                        这是一个追求极致交互体验的翻译插件。<br>
+                        灵感来自于 iOS 的磨砂玻璃与流体设计。<br>
+                        希望它能让你的阅读体验如水般顺滑。💧
+                    </p>
+
+                    <div style="margin-top:24px; font-size:11px; color:var(--sf-text-sub); opacity:0.6;">
+                         Design by WangPan © 2025
+                    </div>
+                </div>
             </div>
-        </div>
-        <div style="margin-bottom: 24px;">
-            <label class="sf-label">模型选择</label>
-            <input type="text" id="sf-cfg-model" class="sf-input" list="sf-model-list" value="${config.model}" placeholder="选择或输入模型">
-            <datalist id="sf-model-list">
-                <option value="Qwen/Qwen2.5-7B-Instruct">Qwen 2.5 7B (极速)</option>
-                <option value="Qwen/Qwen2.5-72B-Instruct">Qwen 2.5 72B (推荐)</option>
-                <option value="deepseek-ai/DeepSeek-V3">DeepSeek V3 (最强)</option>
-                <option value="THUDM/glm-4-9b-chat">GLM-4 9B</option>
-            </datalist>
-        </div>
-        <button id="sf-save-btn" class="sf-btn sf-btn-primary">保存更改</button>
-        <div style="margin-top:16px; text-align:center;">
-            <a href="https://cloud.siliconflow.cn/" target="_blank" style="color:var(--sf-primary); font-size:12px; text-decoration:none; opacity:0.8;">获取免费 API Key</a>
         </div>
     `;
     document.body.appendChild(settingsModal);
@@ -571,10 +705,11 @@
     });
 
     // 3. ✨ 新增：手动翻译面板 ✨
+    // [修改注]：在 sf-header-row 中添加了 id="sf-manual-drag-handle" 和 cursor: move 样式
     const manualPanel = document.createElement("div");
     manualPanel.id = "sf-manual-panel";
     manualPanel.innerHTML = `
-        <div class="sf-header-row" style="margin-bottom:12px">
+        <div class="sf-header-row" id="sf-manual-drag-handle" style="margin-bottom:12px; cursor: move;">
             <h3 class="sf-title" style="font-size:17px">手动翻译</h3>
             <div class="sf-close" id="sf-manual-close">×</div>
         </div>
@@ -662,7 +797,7 @@
         }
     });
 
-    // --- 拖拽逻辑 ---
+    // --- 拖拽逻辑 (设置面板) ---
     let isDragging = false;
     let dragOffsetX = 0, dragOffsetY = 0;
     const dragHandle = document.getElementById("sf-drag-handle");
@@ -693,11 +828,51 @@
         document.body.style.userSelect = "";
     });
 
-    // --- 设置面板开关 ---
+    // --- 🆕 拖拽逻辑 (手动翻译面板) ---
+    const manualDragHandle = document.getElementById("sf-manual-drag-handle");
+    let isManualDragging = false;
+    let manualDragOffsetX = 0, manualDragOffsetY = 0;
+
+    manualDragHandle.addEventListener("mousedown", (e) => {
+        if (e.target.classList.contains("sf-close")) return;
+        isManualDragging = true;
+        const rect = manualPanel.getBoundingClientRect();
+        manualDragOffsetX = e.clientX - rect.left;
+        manualDragOffsetY = e.clientY - rect.top;
+
+        // 关键：重置 transform 以防止拖拽时坐标计算偏移
+        manualPanel.style.transform = "scale(1)";
+        manualPanel.style.left = rect.left + "px";
+        manualPanel.style.top = rect.top + "px";
+        document.body.style.userSelect = "none";
+        manualPanel.style.cursor = "grabbing";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (!isManualDragging) return;
+        let x = e.clientX - manualDragOffsetX;
+        let y = e.clientY - manualDragOffsetY;
+        // 简单的边界检查
+        if(y < 0) y = 0;
+        manualPanel.style.left = x + "px";
+        manualPanel.style.top = y + "px";
+    });
+
+    document.addEventListener("mouseup", () => {
+        if(isManualDragging) {
+            isManualDragging = false;
+            document.body.style.userSelect = "";
+            manualPanel.style.cursor = "auto";
+        }
+    });
+
+    // --- 设置面板开关与页面切换 ---
     function toggleSettings(show) {
         if (show) {
             document.getElementById("sf-greeting-text").innerText = getGreeting();
             settingsModal.classList.add("sf-open");
+            // 重置到主视图
+            settingsModal.classList.remove("sf-show-info");
             overlay.classList.add("sf-open");
             document.body.style.overflow = "hidden";
             if (!settingsModal.style.left) {
@@ -736,8 +911,18 @@
         showToast("配置已更新", "success");
     };
 
-    document.querySelector(".sf-close").onclick = () => toggleSettings(false);
+    document.getElementById("sf-settings-close").onclick = () => toggleSettings(false);
     overlay.onclick = () => { toggleSettings(false); toggleManualPanel(false); };
+
+    // --- 页面切换逻辑 ---
+    document.getElementById("sf-to-info").onclick = () => {
+        settingsModal.classList.add("sf-show-info");
+    };
+
+    document.getElementById("sf-back-main").onclick = () => {
+        settingsModal.classList.remove("sf-show-info");
+    };
+
 
     // --- 手动翻译面板逻辑 ---
     function toggleManualPanel(show) {
@@ -745,10 +930,19 @@
             manualPanel.classList.add("sf-open");
             overlay.classList.add("sf-open");
             document.getElementById("sf-manual-input").focus();
+             // 如果是初次打开（没有 left/top），居中；如果有，保留位置
+             if (!manualPanel.style.left) {
+                 manualPanel.style.left = "50%";
+                 manualPanel.style.top = "50%";
+                 manualPanel.style.transform = "translate(-50%, -50%) scale(1)"; // 初次居中需要 translate
+            } else {
+                 manualPanel.style.transform = "scale(1)"; // 之后只需要 scale
+            }
+
             // 尝试读取剪贴板
              navigator.clipboard.readText().then(text => {
                  if(text && text.trim().length > 0 && document.getElementById("sf-manual-input").value === "") {
-                     // 可选：自动粘贴？这里为了避免干扰用户，先不自动粘贴，只聚焦
+                     // 可选：自动粘贴
                  }
              }).catch(()=>{});
 
@@ -833,7 +1027,7 @@
     let selectedText = "";
 
     document.addEventListener("click", (e) => {
-        if (e.altKey && !isDragging && !settingsModal.contains(e.target) && !manualPanel.contains(e.target)) {
+        if (e.altKey && !isDragging && !isManualDragging && !settingsModal.contains(e.target) && !manualPanel.contains(e.target)) {
             const target = e.target;
             if (target.innerText && target.innerText.trim().length > 0) {
                 e.preventDefault();
@@ -877,7 +1071,7 @@
     }
 
     document.addEventListener("mouseup", (e) => {
-        if (isDragging) return;
+        if (isDragging || isManualDragging) return;
         if (tooltip.contains(e.target)) return;
         if (manualPanel.contains(e.target)) return; // 忽略手动面板内的点击
         if (smartIcon.contains(e.target) || settingsModal.contains(e.target)) return;
@@ -949,8 +1143,7 @@
                 }
             }
         }
-        // Alt + S 呼出手动面板
-        // 修改为 Alt + X
+        // Alt + X 呼出手动面板
         if (e.altKey && (e.code === "KeyX" || e.key === "x" || e.key === "X")) {
             e.preventDefault();
             const isOpen = manualPanel.classList.contains("sf-open");
