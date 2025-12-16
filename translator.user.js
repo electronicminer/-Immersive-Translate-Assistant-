@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.53
+// @version     9.54
 // @description 智能划词翻译，原地替换。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。修复下拉菜单选项重复生成的问题。
 // @author      WangPan
 // @match       *://*/*
