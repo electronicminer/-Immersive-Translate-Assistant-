@@ -12,8 +12,8 @@
 // @grant       GM_registerMenuCommand
 // @grant       GM_unregisterMenuCommand
 // @grant       GM_setClipboard
-// @updateURL   https://github.com/你的用户名/你的仓库/raw/main/沉浸翻译助手.user.js
-// @downloadURL https://github.com/你的用户名/你的仓库/raw/main/沉浸翻译助手.user.js
+// @updateURL   https://github.com/electronicminer/-Immersive-Translate-Assistant-/raw/main/translator.user.js
+// @downloadURL https://github.com/electronicminer/-Immersive-Translate-Assistant-/raw/main/translator.user.js
 // ==/UserScript==
 
 (function() {
