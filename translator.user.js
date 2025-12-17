@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name        沉浸翻译助手 (Touch适配版)
+// @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
 // @version     9.56
 // @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。已适配iPad触摸拖动与交互。
