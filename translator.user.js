@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name        沉浸翻译助手 (护眼增强版)
+// @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
 // @version     9.60
 // @description 智能划词翻译，集成 Liquid Glass 特效。护眼模式升级：引入丝滑过渡动画与深度暗黑滚动条，修复黑白相间问题。
