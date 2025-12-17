@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name        沉浸翻译助手
+// @name        沉浸翻译助手 (护眼增强版)
 // @namespace   http://tampermonkey.net/
-// @version     9.57
-// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。已适配iPad触摸拖动与交互。
-// @author      WangPan
+// @version     9.60
+// @description 智能划词翻译，集成 Liquid Glass 特效。护眼模式升级：引入丝滑过渡动画与深度暗黑滚动条，修复黑白相间问题。
+// @author      WangPan (Modified for Dark Mode)
 // @match       *://*/*
 // @connect     api.siliconflow.cn
 // @grant       GM_xmlhttpRequest
@@ -12,8 +12,8 @@
 // @grant       GM_registerMenuCommand
 // @grant       GM_unregisterMenuCommand
 // @grant       GM_setClipboard
-// @updateURL    https://cdn.jsdelivr.net/gh/electronicminer/-Immersive-Translate-Assistant-@main/translator.user.js
-// @downloadURL  https://cdn.jsdelivr.net/gh/electronicminer/-Immersive-Translate-Assistant-@main/translator.user.js
+// @updateURL   https://cdn.jsdelivr.net/gh/electronicminer/-Immersive-Translate-Assistant-@main/translator.user.js
+// @downloadURL https://cdn.jsdelivr.net/gh/electronicminer/-Immersive-Translate-Assistant-@main/translator.user.js
 // ==/UserScript==
 
 (function() {
@@ -251,7 +251,7 @@
             this.destroyed = true;
             if(this.moveHandler) {
                 document.removeEventListener('mousemove', this.moveHandler);
-                document.removeEventListener('touchmove', this.moveHandler); // [Touch Adapter] 移除触摸监听
+                document.removeEventListener('touchmove', this.moveHandler);
             }
             if (this.svg && this.svg.parentNode) this.svg.remove();
             this.svg = null;
@@ -265,6 +265,7 @@
         API_URL: "https://api.siliconflow.cn/v1/chat/completions",
         TARGET_LANG: "简体中文",
         TRANS_STYLE: "daily",
+        THEME_MODE: "light", // 默认正常模式
         ICON_OFFSET_X: 10,
         ICON_OFFSET_Y: 10,
         MAX_CONCURRENT: 2,
@@ -281,10 +282,11 @@
         model: GM_getValue("SF_MODEL", DEFAULTS.MODEL),
         targetLang: GM_getValue("SF_TARGET_LANG", DEFAULTS.TARGET_LANG),
         transStyle: GM_getValue("SF_TRANS_STYLE", DEFAULTS.TRANS_STYLE),
+        themeMode: GM_getValue("SF_THEME_MODE", DEFAULTS.THEME_MODE),
         apiKey: GM_getValue("SF_API_KEY", ""),
         enableIcon: GM_getValue("SF_ENABLE_ICON", true),
         enableTooltip: GM_getValue("SF_ENABLE_TOOLTIP", true),
-        onlyTooltip: GM_getValue("SF_ONLY_TOOLTIP", false) // 新增功能：仅显示悬浮窗模式
+        onlyTooltip: GM_getValue("SF_ONLY_TOOLTIP", false)
     };
 
     // --- 🎨 样式注入 (CSS) ---
@@ -415,7 +417,7 @@
         }
         #sf-settings-modal.sf-open { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
 
-        #sf-view-container { position: relative; width: 100%; height: 680px; overflow: hidden; }
+        #sf-view-container { position: relative; width: 100%; height: 720px; overflow: hidden; }
 
         .sf-view {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -546,7 +548,7 @@
         .sf-tooltip.sf-top .sf-tooltip-arrow { bottom: -6px; left: 16px; border-bottom: 1px solid rgba(255,255,255,0.15); border-right: 1px solid rgba(255,255,255,0.15); }
         .sf-tooltip.sf-bottom .sf-tooltip-arrow { top: -6px; left: 16px; border-top: 1px solid rgba(255,255,255,0.15); border-left: 1px solid rgba(255,255,255,0.15); }
 
-        .sf-action-btn { margin-top: 8px; width: 100%; background: rgba(255,255,255,0.1); border: none; color: var(--sf-tooltip-text); padding: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.2s; box-sizing: border-box; }
+        .sf-action-btn { width: 100%; background: rgba(255,255,255,0.1); border: none; color: var(--sf-tooltip-text); padding: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.2s; box-sizing: border-box; }
         .sf-action-btn:hover { background: rgba(255,255,255,0.2); }
         .sf-action-btn:active { background: rgba(255,255,255,0.05); transform: scale(0.96); }
 
@@ -655,6 +657,16 @@
                     </label>
                 </div>
 
+                <!-- 🌙 网页护眼模式设置 -->
+                <div style="margin-bottom: 20px;">
+                    <label class="sf-label">网页护眼模式</label>
+                    <select id="sf-cfg-theme" class="sf-select" style="display:none">
+                        <option value="auto">🤖 跟随系统 (自动)</option>
+                        <option value="light">☀️ 正常模式 (关闭)</option>
+                        <option value="dark">🌙 护眼黑夜 (开启)</option>
+                    </select>
+                </div>
+
                 <!-- 优化布局：左右分栏，避免挤压 -->
                 <div style="display:flex; gap:12px; margin-bottom: 20px;">
                     <div style="flex:1;">
@@ -706,7 +718,7 @@
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.57</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.60</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
@@ -770,7 +782,7 @@
     // 这个函数会找到页面上隐藏的原生 select，并在其位置生成一个漂亮的 Trigger
     // 点击 Trigger 会在 body 根节点挂载一个 Fixed 定位的 Popup，避免被 Modal 遮挡
     function initCustomSelects() {
-        const selects = ['sf-cfg-lang', 'sf-cfg-style'];
+        const selects = ['sf-cfg-lang', 'sf-cfg-style', 'sf-cfg-theme']; // 加入 sf-cfg-theme
         selects.forEach(id => {
             const originalSelect = document.getElementById(id);
             if (!originalSelect) return;
@@ -796,7 +808,10 @@
             };
 
             // 初始化/重置文字
-            originalSelect.value = id === 'sf-cfg-lang' ? config.targetLang : config.transStyle;
+            if (id === 'sf-cfg-lang') originalSelect.value = config.targetLang;
+            else if (id === 'sf-cfg-style') originalSelect.value = config.transStyle;
+            else if (id === 'sf-cfg-theme') originalSelect.value = config.themeMode;
+
             updateTrigger();
 
             // 点击触发器 (仅在新创建时绑定)
@@ -926,6 +941,99 @@
         if (hour < 18) return "下午好，保持专注 💪";
         return "晚上好，享受生活 🌃";
     }
+
+    // --- 🌙 护眼模式核心逻辑 (智能版) ---
+    function applyWebPageTheme() {
+        const id = 'sf-global-theme-style';
+        let style = document.getElementById(id);
+        if(!style) {
+            style = document.createElement('style');
+            style.id = id;
+            document.documentElement.appendChild(style);
+        }
+
+        const mode = config.themeMode;
+        let isDark = mode === 'dark';
+        if (mode === 'auto' && window.matchMedia) {
+             isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        }
+
+        if (isDark) {
+            // [智能检测]：计算当前网页背景的亮度
+            let bg = window.getComputedStyle(document.body).backgroundColor;
+            let isAlreadyDark = false;
+            
+            // 解析 RGB
+            const rgb = bg.match(/\d+/g);
+            if (rgb && rgb.length >= 3) {
+                const r = parseInt(rgb[0]);
+                const g = parseInt(rgb[1]);
+                const b = parseInt(rgb[2]);
+                // 亮度公式 (Rec. 601)
+                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                
+                if (!(rgb.length === 4 && parseInt(rgb[3]) === 0) && brightness < 128) {
+                    isAlreadyDark = true;
+                }
+            }
+            
+            if (isAlreadyDark) {
+                // 【深色网页模式】：只降低亮度和对比度，不反色
+                style.innerHTML = `
+                    html {
+                        filter: brightness(0.9) contrast(0.95) !important;
+                        transition: filter 0.4s ease-in-out;
+                    }
+                `;
+            } else {
+                // 【浅色网页模式】：执行反色 + 智能修正 + 滚动条美化
+                // 1. invert(1) hue-rotate(180deg): 经典反色
+                // 2. brightness(0.9): 压制反色后的高光
+                // 3. contrast(0.9): 降低对比度
+                style.innerHTML = `
+                    html {
+                        filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) !important;
+                        text-shadow: 0 0 0 !important;
+                        background-color: #f0f0f0 !important; 
+                        transition: filter 0.4s ease-in-out, background-color 0.4s ease-in-out;
+                    }
+                    /* 反转回来：图片、视频、Canvas */
+                    img, video, canvas, object, embed, iframe {
+                        filter: invert(1) hue-rotate(180deg) brightness(0.95) !important;
+                        opacity: 0.95;
+                        transition: opacity 0.3s;
+                    }
+                    img:hover, video:hover { opacity: 1; }
+                    
+                    /* 反转回来：本插件的 UI 元素，确保 Liquid Glass 质感 */
+                    #sf-smart-icon, #sf-settings-modal, #sf-manual-panel, .sf-tooltip, .sf-select-popup, .sf-toast, #sf-toast-container {
+                        filter: invert(1) hue-rotate(180deg) !important;
+                    }
+
+                    /* --- 深度暗黑滚动条 (Webkit内核) --- */
+                    ::-webkit-scrollbar { width: 12px; height: 12px; background-color: #1a1a1a; }
+                    ::-webkit-scrollbar-track { background-color: #1a1a1a; }
+                    ::-webkit-scrollbar-thumb { background-color: #4a4a4a; border-radius: 6px; border: 2px solid #1a1a1a; }
+                    ::-webkit-scrollbar-thumb:hover { background-color: #6a6a6a; }
+                    ::-webkit-scrollbar-corner { background-color: #1a1a1a; }
+                `;
+            }
+        } else {
+            style.innerHTML = `html { transition: filter 0.4s ease-in-out; }`; // 保持过渡
+        }
+    }
+
+    // 监听系统主题变化 (针对 auto 模式)
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (config.themeMode === 'auto') {
+                applyWebPageTheme();
+            }
+        });
+    }
+
+    // 初始化应用主题
+    setTimeout(applyWebPageTheme, 100);
 
     // --- 磁吸逻辑 ---
     let iconBaseX = 0;
@@ -1115,6 +1223,7 @@
         config.apiKey = newKey;
         config.targetLang = document.getElementById("sf-cfg-lang").value;
         config.transStyle = document.getElementById("sf-cfg-style").value;
+        config.themeMode = document.getElementById("sf-cfg-theme").value; // 保存主题设置
         config.model = document.getElementById("sf-cfg-model").value.trim();
         config.enableIcon = document.getElementById("sf-cfg-icon").checked;
         config.enableTooltip = document.getElementById("sf-cfg-tooltip").checked;
@@ -1123,10 +1232,14 @@
         GM_setValue("SF_API_KEY", config.apiKey);
         GM_setValue("SF_TARGET_LANG", config.targetLang);
         GM_setValue("SF_TRANS_STYLE", config.transStyle);
+        GM_setValue("SF_THEME_MODE", config.themeMode);
         GM_setValue("SF_MODEL", config.model);
         GM_setValue("SF_ENABLE_ICON", config.enableIcon);
         GM_setValue("SF_ENABLE_TOOLTIP", config.enableTooltip);
         GM_setValue("SF_ONLY_TOOLTIP", config.onlyTooltip);
+
+        // 立即应用主题
+        applyWebPageTheme();
 
         toggleSettings(false);
         showToast("配置已更新", "success");
@@ -1143,6 +1256,14 @@
         settingsModal.classList.remove("sf-show-info");
     };
 
+    // --- 全局快捷键：ESC 关闭面板 ---
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            if (settingsModal.classList.contains("sf-open")) toggleSettings(false);
+            if (manualPanel.classList.contains("sf-open")) toggleManualPanel(false);
+            closeAllPopups();
+        }
+    });
 
     // --- 手动翻译面板逻辑 ---
     function toggleManualPanel(show) {
@@ -1273,7 +1394,7 @@
             // iOS 的原生选中菜单 (Copy/Lookup) 通常高度在 40px 左右，且会紧贴选区下方或上方
             // 这里为触摸设备增加额外的垂直偏移量 (45px)，让图标显示在原生菜单的下方，避免重叠
             const isTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
-            const touchOffsetY = isTouch ? 45 : 0; 
+            const touchOffsetY = isTouch ? 45 : 0;
 
             let top = rect.bottom + window.scrollY + DEFAULTS.ICON_OFFSET_Y + touchOffsetY;
             let left = rect.right + window.scrollX + DEFAULTS.ICON_OFFSET_X;
@@ -1359,8 +1480,8 @@
             // 在触摸开始时检查，可以更灵敏地隐藏图标
              if (!window.getSelection().toString().trim()) {
                  if (isIconVisible) {
-                     smartIcon.style.display = "none";
-                     isIconVisible = false;
+                      smartIcon.style.display = "none";
+                      isIconVisible = false;
                  }
              }
         }
@@ -1584,27 +1705,23 @@
         }
 
         const spaceBelow = window.innerHeight - clientY;
-        const tooltipHeight = 150; // 估算高度
+        const tooltipHeight = 150; // 估算高度 (增加了按钮高度)
 
         let top;
         // 智能判断上下位置
-        // 如果是元素触发，优先显示在下方，除非下方空间不足
         if (target instanceof HTMLElement) {
              if (spaceBelow < tooltipHeight + 20) {
-                 // 上方显示
                  top = targetRect.top - rect.height - 10;
                  tooltip.classList.remove('sf-bottom');
                  tooltip.classList.add('sf-top');
                  tooltip.style.transformOrigin = "bottom center";
              } else {
-                 // 下方显示
                  top = targetRect.bottom + 10;
                  tooltip.classList.remove('sf-top');
                  tooltip.classList.add('sf-bottom');
                  tooltip.style.transformOrigin = "top center";
              }
         } else {
-            // 鼠标触发的原有逻辑
             if (spaceBelow < tooltipHeight + 20) {
                 top = clientY - rect.height - 10;
                 if (top < 10) top = clientY + 20;
