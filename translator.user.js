@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name        沉浸翻译助手
+// @name        沉浸翻译助手 (Touch适配版)
 // @namespace   http://tampermonkey.net/
 // @version     9.56
 // @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。已适配iPad触摸拖动与交互。
@@ -706,7 +706,7 @@
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.56</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.55</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
@@ -1268,7 +1268,14 @@
             selectedText = text;
             selectedRange = selection.getRangeAt(0);
             const rect = selectedRange.getBoundingClientRect();
-            let top = rect.bottom + window.scrollY + DEFAULTS.ICON_OFFSET_Y;
+
+            // [Touch Adapter] 检测是否为触摸设备 (如 iPad/iPhone)
+            // iOS 的原生选中菜单 (Copy/Lookup) 通常高度在 40px 左右，且会紧贴选区下方或上方
+            // 这里为触摸设备增加额外的垂直偏移量 (45px)，让图标显示在原生菜单的下方，避免重叠
+            const isTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+            const touchOffsetY = isTouch ? 45 : 0; 
+
+            let top = rect.bottom + window.scrollY + DEFAULTS.ICON_OFFSET_Y + touchOffsetY;
             let left = rect.right + window.scrollX + DEFAULTS.ICON_OFFSET_X;
             if (left + 40 > document.body.scrollWidth) left = document.body.scrollWidth - 50;
 
