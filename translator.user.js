@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.55
-// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。
+// @version     9.56
+// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。已适配iPad触摸拖动与交互。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -78,14 +78,20 @@
                 const rect = this.target.getBoundingClientRect();
                 if (rect.width === 0 || rect.height === 0 || window.getComputedStyle(this.target).opacity === '0') return;
 
-                this.targetMouse.x = (e.clientX - rect.left) / rect.width;
-                this.targetMouse.y = (e.clientY - rect.top) / rect.height;
+                // [Touch Adapter] 获取坐标，兼容鼠标和触摸
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                this.targetMouse.x = (clientX - rect.left) / rect.width;
+                this.targetMouse.y = (clientY - rect.top) / rect.height;
                 if(!this.isRendering) {
                     this.isRendering = true;
                     this.startLoop();
                 }
              };
              document.addEventListener('mousemove', this.moveHandler);
+             // [Touch Adapter] 添加触摸移动监听
+             document.addEventListener('touchmove', this.moveHandler, { passive: true });
         }
 
         initSVG() {
@@ -243,7 +249,10 @@
 
         destroy() {
             this.destroyed = true;
-            if(this.moveHandler) document.removeEventListener('mousemove', this.moveHandler);
+            if(this.moveHandler) {
+                document.removeEventListener('mousemove', this.moveHandler);
+                document.removeEventListener('touchmove', this.moveHandler); // [Touch Adapter] 移除触摸监听
+            }
             if (this.svg && this.svg.parentNode) this.svg.remove();
             this.svg = null;
             this.canvas = null;
@@ -697,7 +706,7 @@
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.55</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.56</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
@@ -958,6 +967,21 @@
         document.body.style.userSelect = "none";
     });
 
+    // [Touch Adapter] 设置面板拖动 - 触摸支持
+    dragHandle.addEventListener("touchstart", (e) => {
+        if (e.target.classList.contains("sf-close")) return;
+        isDragging = true;
+        const rect = settingsModal.getBoundingClientRect();
+        const touch = e.touches[0];
+        dragOffsetX = touch.clientX - rect.left;
+        dragOffsetY = touch.clientY - rect.top;
+        settingsModal.style.transform = "scale(1)";
+        settingsModal.style.left = rect.left + "px";
+        settingsModal.style.top = rect.top + "px";
+        // 阻止默认滚动，防止拖动面板时页面跟着滚动
+        e.preventDefault();
+    }, { passive: false });
+
     document.addEventListener("mousemove", (e) => {
         if (!isDragging) return;
         let x = e.clientX - dragOffsetX;
@@ -967,9 +991,26 @@
         settingsModal.style.top = y + "px";
     });
 
+    // [Touch Adapter] 设置面板拖动移动 - 触摸支持
+    document.addEventListener("touchmove", (e) => {
+        if (!isDragging) return;
+        e.preventDefault(); // 阻止滚动
+        const touch = e.touches[0];
+        let x = touch.clientX - dragOffsetX;
+        let y = touch.clientY - dragOffsetY;
+        if(x < 0) x = 0; if(y < 0) y = 0;
+        settingsModal.style.left = x + "px";
+        settingsModal.style.top = y + "px";
+    }, { passive: false });
+
+
     document.addEventListener("mouseup", (e) => {
         isDragging = false;
         document.body.style.userSelect = "";
+    });
+    // [Touch Adapter] 拖动结束 - 触摸支持
+    document.addEventListener("touchend", (e) => {
+        isDragging = false;
     });
 
     // --- 拖拽逻辑 (手动翻译面板) ---
@@ -990,6 +1031,21 @@
         manualPanel.style.cursor = "grabbing";
     });
 
+    // [Touch Adapter] 手动翻译面板拖动 - 触摸支持
+    manualDragHandle.addEventListener("touchstart", (e) => {
+        if (e.target.classList.contains("sf-close")) return;
+        isManualDragging = true;
+        const rect = manualPanel.getBoundingClientRect();
+        const touch = e.touches[0];
+        manualDragOffsetX = touch.clientX - rect.left;
+        manualDragOffsetY = touch.clientY - rect.top;
+        manualPanel.style.transform = "scale(1)";
+        manualPanel.style.left = rect.left + "px";
+        manualPanel.style.top = rect.top + "px";
+        e.preventDefault();
+    }, { passive: false });
+
+
     document.addEventListener("mousemove", (e) => {
         if (!isManualDragging) return;
         let x = e.clientX - manualDragOffsetX;
@@ -999,11 +1055,29 @@
         manualPanel.style.top = y + "px";
     });
 
+    // [Touch Adapter] 手动翻译面板拖动移动 - 触摸支持
+    document.addEventListener("touchmove", (e) => {
+        if (!isManualDragging) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        let x = touch.clientX - manualDragOffsetX;
+        let y = touch.clientY - manualDragOffsetY;
+        if(y < 0) y = 0;
+        manualPanel.style.left = x + "px";
+        manualPanel.style.top = y + "px";
+    }, { passive: false });
+
     document.addEventListener("mouseup", () => {
         if(isManualDragging) {
             isManualDragging = false;
             document.body.style.userSelect = "";
             manualPanel.style.cursor = "auto";
+        }
+    });
+    // [Touch Adapter] 拖动结束
+    document.addEventListener("touchend", () => {
+        if(isManualDragging) {
+            isManualDragging = false;
         }
     });
 
@@ -1233,6 +1307,28 @@
         }, 10);
     });
 
+    // [Touch Adapter] 文本选择结束与图标触发 - 触摸支持
+    document.addEventListener("touchend", (e) => {
+        if (isDragging || isManualDragging) return;
+        // 忽略面板内点击
+        if (tooltip.contains(e.target) || manualPanel.contains(e.target) || settingsModal.contains(e.target)) return;
+        if (activePopup && activePopup.contains(e.target)) return;
+
+        // 延迟执行，因为触摸结束时选区可能尚未完全确立
+        setTimeout(() => {
+            const selection = window.getSelection();
+            if (selection.toString().trim().length > 0) {
+                processSelection(selection);
+            } else {
+                 // 如果没有选区，隐藏图标
+                 if (smartIcon.style.display !== "none" && !smartIcon.classList.contains("sf-pop-out")) {
+                      smartIcon.style.display = "none";
+                      isIconVisible = false;
+                 }
+            }
+        }, 100);
+    });
+
     document.addEventListener("mousedown", (e) => {
         if (tooltip.contains(e.target)) return;
         if (manualPanel.contains(e.target)) return;
@@ -1244,6 +1340,22 @@
                     isIconVisible = false;
                 }
             }, 100);
+        }
+    });
+
+    // [Touch Adapter] 点击空白处隐藏图标 - 触摸支持
+    document.addEventListener("touchstart", (e) => {
+        if (tooltip.contains(e.target)) return;
+        if (manualPanel.contains(e.target)) return;
+        if (activePopup && activePopup.contains(e.target)) return;
+        if (!smartIcon.contains(e.target) && !settingsModal.contains(e.target)) {
+            // 在触摸开始时检查，可以更灵敏地隐藏图标
+             if (!window.getSelection().toString().trim()) {
+                 if (isIconVisible) {
+                     smartIcon.style.display = "none";
+                     isIconVisible = false;
+                 }
+             }
         }
     });
 
