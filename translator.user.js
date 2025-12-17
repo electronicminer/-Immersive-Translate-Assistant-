@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.56
+// @version     9.57
 // @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。已适配iPad触摸拖动与交互。
 // @author      WangPan
 // @match       *://*/*
@@ -706,7 +706,7 @@
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.55</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.57</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
