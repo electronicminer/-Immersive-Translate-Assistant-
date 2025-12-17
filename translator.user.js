@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.60
+// @version     9.61
 // @description 智能划词翻译，集成 Liquid Glass 特效。护眼模式升级：引入丝滑过渡动画与深度暗黑滚动条，修复黑白相间问题。
 // @author      WangPan
 // @match       *://*/*
@@ -718,7 +718,7 @@
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.60</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.61</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
