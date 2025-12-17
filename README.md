@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-9.55-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-9.57-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/platform-Tampermonkey-orange.svg" alt="Platform">
 </p>
