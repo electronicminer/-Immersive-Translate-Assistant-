@@ -12,8 +12,8 @@
 // @grant       GM_registerMenuCommand
 // @grant       GM_unregisterMenuCommand
 // @grant       GM_setClipboard
-// @updateURL   https://github.com/electronicminer/-Immersive-Translate-Assistant-/raw/main/translator.user.js
-// @downloadURL https://github.com/electronicminer/-Immersive-Translate-Assistant-/raw/main/translator.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/electronicminer/-Immersive-Translate-Assistant-@main/translator.user.js
+// @downloadURL  https://cdn.jsdelivr.net/gh/electronicminer/-Immersive-Translate-Assistant-@main/translator.user.js
 // ==/UserScript==
 
 (function() {
