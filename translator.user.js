@@ -3,7 +3,7 @@
 // @namespace   http://tampermonkey.net/
 // @version     9.60
 // @description 智能划词翻译，集成 Liquid Glass 特效。护眼模式升级：引入丝滑过渡动画与深度暗黑滚动条，修复黑白相间问题。
-// @author      WangPan (Modified for Dark Mode)
+// @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
 // @grant       GM_xmlhttpRequest
