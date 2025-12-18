@@ -941,8 +941,7 @@
         if (hour < 18) return "下午好，保持专注 💪";
         return "晚上好，享受生活 🌃";
     }
-
-    // --- 🌙 护眼模式核心逻辑 (智能版) ---
+// --- 🌙 护眼模式核心逻辑 (参考 Dark Reader 动态算法) ---
     function applyWebPageTheme() {
         const id = 'sf-global-theme-style';
         let style = document.getElementById(id);
@@ -959,67 +958,75 @@
         }
 
         if (isDark) {
-            // [智能检测]：计算当前网页背景的亮度
+            // [智能检测]：获取背景色决定策略
             let bg = window.getComputedStyle(document.body).backgroundColor;
             let isAlreadyDark = false;
-            
-            // 解析 RGB
+
             const rgb = bg.match(/\d+/g);
             if (rgb && rgb.length >= 3) {
-                const r = parseInt(rgb[0]);
-                const g = parseInt(rgb[1]);
-                const b = parseInt(rgb[2]);
-                // 亮度公式 (Rec. 601)
-                const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                
-                if (!(rgb.length === 4 && parseInt(rgb[3]) === 0) && brightness < 128) {
-                    isAlreadyDark = true;
-                }
+                const brightness = (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
+                if (brightness < 80) isAlreadyDark = true;
             }
-            
+
             if (isAlreadyDark) {
-                // 【深色网页模式】：只降低亮度和对比度，不反色
+                // 【深色网页模式】：仅提升一点点亮度和对比度，让暗部更有细节
                 style.innerHTML = `
                     html {
-                        filter: brightness(0.9) contrast(0.95) !important;
-                        transition: filter 0.4s ease-in-out;
+                        filter: brightness(1.05) contrast(1.05) !important;
+                        transition: filter 0.3s ease;
                     }
                 `;
             } else {
-                // 【浅色网页模式】：执行反色 + 智能修正 + 滚动条美化
-                // 1. invert(1) hue-rotate(180deg): 经典反色
-                // 2. brightness(0.9): 压制反色后的高光
-                // 3. contrast(0.9): 降低对比度
+                // 【浅色网页反转】：采用高对比度深度黑方案
                 style.innerHTML = `
+                    :root {
+                        /* 强制浏览器开启原生深色渲染模式 */
+                        color-scheme: dark !important;
+                    }
                     html {
-                        filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) !important;
-                        text-shadow: 0 0 0 !important;
-                        background-color: #f0f0f0 !important; 
-                        transition: filter 0.4s ease-in-out, background-color 0.4s ease-in-out;
-                    }
-                    /* 反转回来：图片、视频、Canvas */
-                    img, video, canvas, object, embed, iframe {
-                        filter: invert(1) hue-rotate(180deg) brightness(0.95) !important;
-                        opacity: 0.95;
-                        transition: opacity 0.3s;
-                    }
-                    img:hover, video:hover { opacity: 1; }
-                    
-                    /* 反转回来：本插件的 UI 元素，确保 Liquid Glass 质感 */
-                    #sf-smart-icon, #sf-settings-modal, #sf-manual-panel, .sf-tooltip, .sf-select-popup, .sf-toast, #sf-toast-container {
-                        filter: invert(1) hue-rotate(180deg) !important;
+                        /* 1. invert(1) 彻底反转 */
+                        /* 2. hue-rotate(180deg) 还原色相 */
+                        /* 3. contrast(1.1) 解决灰蒙蒙感，提升文字清晰度 */
+                        /* 4. saturate(1.2) 补偿色彩，让图标鲜艳 */
+                        filter: invert(1) hue-rotate(180deg) contrast(1.1) brightness(1.0) saturate(1.2) !important;
+                        background-color: #000000 !important;
+                        transition: filter 0.4s ease-in-out;
                     }
 
-                    /* --- 深度暗黑滚动条 (Webkit内核) --- */
-                    ::-webkit-scrollbar { width: 12px; height: 12px; background-color: #1a1a1a; }
-                    ::-webkit-scrollbar-track { background-color: #1a1a1a; }
-                    ::-webkit-scrollbar-thumb { background-color: #4a4a4a; border-radius: 6px; border: 2px solid #1a1a1a; }
-                    ::-webkit-scrollbar-thumb:hover { background-color: #6a6a6a; }
-                    ::-webkit-scrollbar-corner { background-color: #1a1a1a; }
+                    /* 排除元素：图片、视频、地图、画板等 */
+                    /* 使用多重滤镜还原，并微调亮度和对比度，防止图片在黑夜模式下太刺眼 */
+                    img, video, canvas, [style*="background-image"], .video-player, .ad-unit {
+                        filter: invert(1) hue-rotate(-180deg) brightness(0.9) contrast(1.1) !important;
+                        opacity: 0.85;
+                        transition: opacity 0.3s ease;
+                    }
+                    img:hover { opacity: 1; }
+
+                    /* 排除插件自身的 UI，确保其 Liquid Glass 质感不受滤镜影响叠加 */
+                    #sf-smart-icon, #sf-settings-modal, #sf-manual-panel, .sf-tooltip, .sf-select-popup, .sf-toast, #sf-toast-container {
+                        filter: invert(1) hue-rotate(-180deg) brightness(1.05) contrast(1.05) !important;
+                    }
+
+                    /* 深度细节优化：移除文字阴影，防止反色后出现白色描边毛刺 */
+                    * {
+                        text-shadow: none !important;
+                    }
+
+                    /* 处理输入框，防止出现黑白交替的怪异感 */
+                    input, textarea, select {
+                        background-color: transparent !important;
+                        color: inherit !important;
+                    }
+
+                    /* --- 极致深邃滚动条 (类似 MacOS 风格) --- */
+                    ::-webkit-scrollbar { width: 10px; height: 10px; background-color: #000; }
+                    ::-webkit-scrollbar-track { background-color: #000; }
+                    ::-webkit-scrollbar-thumb { background-color: #333; border-radius: 10px; border: 2px solid #000; }
+                    ::-webkit-scrollbar-thumb:hover { background-color: #444; }
                 `;
             }
         } else {
-            style.innerHTML = `html { transition: filter 0.4s ease-in-out; }`; // 保持过渡
+            style.innerHTML = `html { transition: filter 0.4s ease; }`;
         }
     }
 
