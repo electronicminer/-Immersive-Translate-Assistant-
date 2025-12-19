@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.65
-// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。新增“仅显示悬浮窗”模式。已适配iPad触摸拖动与交互。
+// @version     9.66
+// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。新增“智能语种反转”：自动检测中英文，无需手动切换目标语言。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -706,7 +706,7 @@
                 <div class="sf-info-content">
                     <div class="sf-app-logo">🌐</div>
                     <h2 class="sf-info-title" style="font-size:20px; margin:0 0 4px 0;">沉浸翻译助手</h2>
-                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.65</p>
+                    <p style="color:var(--sf-text-sub); font-size:13px; margin:0 0 24px 0;">v9.66</p>
 
                     <div style="background:var(--sf-input-bg); border-radius:12px; padding:16px; text-align:left; margin-bottom:16px;">
                         <div class="sf-info-item">作者 <span class="sf-info-val" style="float:right">汪攀</span></div>
@@ -1200,6 +1200,18 @@
 
         const styleInstruction = PROMPT_STYLES[config.transStyle] || PROMPT_STYLES.daily;
 
+        // --- 🧠 智能语种反转逻辑 (手动模式) ---
+        let effectiveTarget = config.targetLang;
+        const hasChinese = /[\u4e00-\u9fa5]/.test(text);
+
+        if (config.targetLang === "简体中文" && hasChinese) {
+            effectiveTarget = "English";
+        }
+        if (config.targetLang === "English" && !hasChinese) {
+            effectiveTarget = "简体中文";
+        }
+        // ----------------------------------------
+
         GM_xmlhttpRequest({
             method: "POST",
             url: DEFAULTS.API_URL,
@@ -1210,7 +1222,7 @@
             data: JSON.stringify({
                 model: config.model,
                 messages: [
-                    { role: "system", content: `You are a translator. Target: ${config.targetLang}. Style: ${styleInstruction}. Rule: Output ONLY the translated text. No markdown.` },
+                    { role: "system", content: `You are a translator. Target: ${effectiveTarget}. Style: ${styleInstruction}. Rule: Output ONLY the translated text. No markdown.` },
                     { role: "user", content: text }
                 ],
                 stream: false,
@@ -1273,7 +1285,7 @@
             // iOS 的原生选中菜单 (Copy/Lookup) 通常高度在 40px 左右，且会紧贴选区下方或上方
             // 这里为触摸设备增加额外的垂直偏移量 (45px)，让图标显示在原生菜单的下方，避免重叠
             const isTouch = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
-            const touchOffsetY = isTouch ? 45 : 0; 
+            const touchOffsetY = isTouch ? 45 : 0;
 
             let top = rect.bottom + window.scrollY + DEFAULTS.ICON_OFFSET_Y + touchOffsetY;
             let left = rect.right + window.scrollX + DEFAULTS.ICON_OFFSET_X;
@@ -1433,6 +1445,21 @@
     function doTranslation(text, spanElement) {
         const styleInstruction = PROMPT_STYLES[config.transStyle] || PROMPT_STYLES.daily;
 
+        // --- 🧠 智能语种反转逻辑 (核心) ---
+        let effectiveTarget = config.targetLang;
+        // 检测原文是否包含中文字符
+        const hasChinese = /[\u4e00-\u9fa5]/.test(text);
+
+        // 场景1: 用户设置目标为“简体中文”，但选中了中文 -> 自动转为英文
+        if (config.targetLang === "简体中文" && hasChinese) {
+            effectiveTarget = "English";
+        }
+        // 场景2: 用户设置目标为“English”，但选中了非中文（外文） -> 自动转为中文
+        if (config.targetLang === "English" && !hasChinese) {
+             effectiveTarget = "简体中文";
+        }
+        // ---------------------------------
+
         GM_xmlhttpRequest({
             method: "POST",
             url: DEFAULTS.API_URL,
@@ -1443,7 +1470,7 @@
             data: JSON.stringify({
                 model: config.model,
                 messages: [
-                    { role: "system", content: `You are a translator. Target: ${config.targetLang}. Style: ${styleInstruction}. Rule: Output ONLY the translated text. No markdown.` },
+                    { role: "system", content: `You are a translator. Target: ${effectiveTarget}. Style: ${styleInstruction}. Rule: Output ONLY the translated text. No markdown.` },
                     { role: "user", content: text }
                 ],
                 stream: false,
