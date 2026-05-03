@@ -1,8 +1,8 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.66
-// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。新增“智能语种反转”：自动检测中英文，无需手动切换目标语言。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。
+// @version     9.70
+// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。新增"智能语种反转"：自动检测中英文，无需手动切换目标语言。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -257,6 +257,25 @@
             this.svg = null;
             this.canvas = null;
         }
+    }
+
+    // --- 🧠 智能语种反转 ---
+    function resolveTargetLang(text) {
+        const hasChinese = /[一-龥]/.test(text);
+        if (config.targetLang === "简体中文" && hasChinese) return "English";
+        if (config.targetLang === "English" && !hasChinese) return "简体中文";
+        return config.targetLang;
+    }
+
+    // --- 📋 事件监听器注册表 (用于统一清理) ---
+    const _listeners = [];
+    function addManagedListener(el, type, fn, opts) {
+        el.addEventListener(type, fn, opts);
+        _listeners.push({ el, type, fn, opts });
+    }
+    function removeAllListeners() {
+        _listeners.forEach(({ el, type, fn, opts }) => el.removeEventListener(type, fn, opts));
+        _listeners.length = 0;
     }
 
     // --- ⚙️ 配置中心 ---
@@ -723,7 +742,7 @@
                     </p>
 
                     <div style="margin-top:24px; font-size:11px; color:var(--sf-text-sub); opacity:0.6;">
-                          Design by WangPan © 2025
+                          Design by WangPan © 2026
                     </div>
                 </div>
             </div>
@@ -880,7 +899,7 @@
     }
 
     // 点击其他地方关闭下拉菜单
-    document.addEventListener('click', (e) => {
+    addManagedListener(document, 'click', (e) => {
         if (activePopup && !activePopup.contains(e.target)) {
             closeAllPopups();
         }
@@ -932,7 +951,7 @@
     let iconBaseY = 0;
     let isIconVisible = false;
 
-    document.addEventListener("mousemove", (e) => {
+    addManagedListener(document, "mousemove", (e) => {
         if (!isIconVisible || isDragging || smartIcon.classList.contains('sf-pop-out')) return;
         const range = 60;
         const strength = 0.3;
@@ -982,7 +1001,7 @@
         e.preventDefault();
     }, { passive: false });
 
-    document.addEventListener("mousemove", (e) => {
+    addManagedListener(document, "mousemove", (e) => {
         if (!isDragging) return;
         let x = e.clientX - dragOffsetX;
         let y = e.clientY - dragOffsetY;
@@ -992,9 +1011,9 @@
     });
 
     // [Touch Adapter] 设置面板拖动移动 - 触摸支持
-    document.addEventListener("touchmove", (e) => {
+    addManagedListener(document, "touchmove", (e) => {
         if (!isDragging) return;
-        e.preventDefault(); // 阻止滚动
+        e.preventDefault();
         const touch = e.touches[0];
         let x = touch.clientX - dragOffsetX;
         let y = touch.clientY - dragOffsetY;
@@ -1004,12 +1023,12 @@
     }, { passive: false });
 
 
-    document.addEventListener("mouseup", (e) => {
+    addManagedListener(document, "mouseup", (e) => {
         isDragging = false;
         document.body.style.userSelect = "";
     });
     // [Touch Adapter] 拖动结束 - 触摸支持
-    document.addEventListener("touchend", (e) => {
+    addManagedListener(document, "touchend", (e) => {
         isDragging = false;
     });
 
@@ -1046,7 +1065,7 @@
     }, { passive: false });
 
 
-    document.addEventListener("mousemove", (e) => {
+    addManagedListener(document, "mousemove", (e) => {
         if (!isManualDragging) return;
         let x = e.clientX - manualDragOffsetX;
         let y = e.clientY - manualDragOffsetY;
@@ -1056,7 +1075,7 @@
     });
 
     // [Touch Adapter] 手动翻译面板拖动移动 - 触摸支持
-    document.addEventListener("touchmove", (e) => {
+    addManagedListener(document, "touchmove", (e) => {
         if (!isManualDragging) return;
         e.preventDefault();
         const touch = e.touches[0];
@@ -1067,7 +1086,7 @@
         manualPanel.style.top = y + "px";
     }, { passive: false });
 
-    document.addEventListener("mouseup", () => {
+    addManagedListener(document, "mouseup", () => {
         if(isManualDragging) {
             isManualDragging = false;
             document.body.style.userSelect = "";
@@ -1075,7 +1094,7 @@
         }
     });
     // [Touch Adapter] 拖动结束
-    document.addEventListener("touchend", () => {
+    addManagedListener(document, "touchend", () => {
         if(isManualDragging) {
             isManualDragging = false;
         }
@@ -1200,21 +1219,12 @@
 
         const styleInstruction = PROMPT_STYLES[config.transStyle] || PROMPT_STYLES.daily;
 
-        // --- 🧠 智能语种反转逻辑 (手动模式) ---
-        let effectiveTarget = config.targetLang;
-        const hasChinese = /[\u4e00-\u9fa5]/.test(text);
-
-        if (config.targetLang === "简体中文" && hasChinese) {
-            effectiveTarget = "English";
-        }
-        if (config.targetLang === "English" && !hasChinese) {
-            effectiveTarget = "简体中文";
-        }
-        // ----------------------------------------
+        const effectiveTarget = resolveTargetLang(text);
 
         GM_xmlhttpRequest({
             method: "POST",
             url: DEFAULTS.API_URL,
+            timeout: 30000,
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${config.apiKey}`
@@ -1246,6 +1256,10 @@
             onerror: () => {
                  outputArea.style.opacity = "1";
                  outputArea.value = "网络错误";
+            },
+            ontimeout: () => {
+                 outputArea.style.opacity = "1";
+                 outputArea.value = "请求超时";
             }
         });
     }
@@ -1255,7 +1269,7 @@
     let selectedRange = null;
     let selectedText = "";
 
-    document.addEventListener("click", (e) => {
+    addManagedListener(document, "click", (e) => {
         if (e.altKey && !isDragging && !isManualDragging && !settingsModal.contains(e.target) && !manualPanel.contains(e.target)) {
             const target = e.target;
             if (target.innerText && target.innerText.trim().length > 0) {
@@ -1306,11 +1320,11 @@
         }
     }
 
-    document.addEventListener("mouseup", (e) => {
+    addManagedListener(document, "mouseup", (e) => {
         if (isDragging || isManualDragging) return;
         if (tooltip.contains(e.target)) return;
         if (manualPanel.contains(e.target)) return;
-        if (activePopup && activePopup.contains(e.target)) return; // 忽略下拉菜单的点击
+        if (activePopup && activePopup.contains(e.target)) return;
         if (smartIcon.contains(e.target) || settingsModal.contains(e.target)) return;
         if (e.altKey) return;
         setTimeout(() => {
@@ -1327,7 +1341,7 @@
     });
 
     // [Touch Adapter] 文本选择结束与图标触发 - 触摸支持
-    document.addEventListener("touchend", (e) => {
+    addManagedListener(document, "touchend", (e) => {
         if (isDragging || isManualDragging) return;
         // 忽略面板内点击
         if (tooltip.contains(e.target) || manualPanel.contains(e.target) || settingsModal.contains(e.target)) return;
@@ -1348,7 +1362,7 @@
         }, 100);
     });
 
-    document.addEventListener("mousedown", (e) => {
+    addManagedListener(document, "mousedown", (e) => {
         if (tooltip.contains(e.target)) return;
         if (manualPanel.contains(e.target)) return;
         if (activePopup && activePopup.contains(e.target)) return;
@@ -1363,7 +1377,7 @@
     });
 
     // [Touch Adapter] 点击空白处隐藏图标 - 触摸支持
-    document.addEventListener("touchstart", (e) => {
+    addManagedListener(document, "touchstart", (e) => {
         if (tooltip.contains(e.target)) return;
         if (manualPanel.contains(e.target)) return;
         if (activePopup && activePopup.contains(e.target)) return;
@@ -1407,7 +1421,7 @@
         doTranslation(selectedText, span);
     }
 
-    document.addEventListener("keydown", (e) => {
+    addManagedListener(document, "keydown", (e) => {
         if (e.altKey && (e.code === "KeyZ" || e.key === "z" || e.key === "Z")) {
             const selection = window.getSelection();
             if (selection.rangeCount > 0) {
@@ -1444,25 +1458,12 @@
 
     function doTranslation(text, spanElement) {
         const styleInstruction = PROMPT_STYLES[config.transStyle] || PROMPT_STYLES.daily;
-
-        // --- 🧠 智能语种反转逻辑 (核心) ---
-        let effectiveTarget = config.targetLang;
-        // 检测原文是否包含中文字符
-        const hasChinese = /[\u4e00-\u9fa5]/.test(text);
-
-        // 场景1: 用户设置目标为“简体中文”，但选中了中文 -> 自动转为英文
-        if (config.targetLang === "简体中文" && hasChinese) {
-            effectiveTarget = "English";
-        }
-        // 场景2: 用户设置目标为“English”，但选中了非中文（外文） -> 自动转为中文
-        if (config.targetLang === "English" && !hasChinese) {
-             effectiveTarget = "简体中文";
-        }
-        // ---------------------------------
+        const effectiveTarget = resolveTargetLang(text);
 
         GM_xmlhttpRequest({
             method: "POST",
             url: DEFAULTS.API_URL,
+            timeout: 30000,
             headers: {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${config.apiKey}`
@@ -1490,7 +1491,8 @@
                     updateUIError(spanElement, `Error ${res.status}`);
                 }
             },
-            onerror: () => updateUIError(spanElement, "网络错误")
+            onerror: () => updateUIError(spanElement, "网络错误"),
+            ontimeout: () => updateUIError(spanElement, "请求超时")
         });
     }
 
@@ -1555,7 +1557,6 @@
     function updateUIError(span, msg) {
         span.classList.remove("sf-loading");
         span.classList.add("sf-error");
-        // 错误状态下总是显示错误信息，点击恢复原文
         const originalText = span.getAttribute("data-original");
         if (!config.onlyTooltip) {
              span.innerText = `[${msg}]`;
@@ -1563,9 +1564,7 @@
         showToast("翻译请求失败", "error");
         span.onclick = (e) => {
             e.stopPropagation();
-            span.innerText = originalText;
-            span.className = ""; // 移除所有样式，变回普通文本
-            // 这里可以做一个更优雅的“解包”逻辑，把 span 替换回纯文本节点，不过清空 class 视觉上也差不多
+            span.replaceWith(document.createTextNode(originalText));
         };
     }
 
@@ -1586,66 +1585,43 @@
             <button class="sf-action-btn" id="sf-btn-copy">复制</button>
         `;
 
-        // 计算定位坐标
-        let clientX, clientY;
         const rect = tooltip.getBoundingClientRect();
-        let targetRect = null;
+        let left, top;
 
         if (target instanceof HTMLElement) {
-            // 如果传入的是 DOM 元素 (自动弹出模式)
-            targetRect = target.getBoundingClientRect();
-            clientX = targetRect.left + targetRect.width / 2;
-            clientY = targetRect.bottom;
+            // DOM 元素触发 (仅悬浮窗模式自动弹出)
+            const targetRect = target.getBoundingClientRect();
+            const centerX = targetRect.left + targetRect.width / 2;
+            left = centerX - rect.width / 2;
+
+            const spaceBelow = window.innerHeight - targetRect.bottom;
+            if (spaceBelow < 170) {
+                top = targetRect.top - rect.height - 10;
+                tooltip.className = 'sf-tooltip sf-top';
+                tooltip.style.transformOrigin = "bottom center";
+            } else {
+                top = targetRect.bottom + 10;
+                tooltip.className = 'sf-tooltip sf-bottom';
+                tooltip.style.transformOrigin = "top center";
+            }
         } else if (target.clientX !== undefined) {
-            // 如果传入的是鼠标事件
-            clientX = target.clientX;
-            clientY = target.clientY;
-        } else {
-            return;
-        }
-
-        let left = clientX - 20;
-        // 如果是元素触发，让 tooltip 居中对齐元素
-        if (target instanceof HTMLElement) {
-             left = clientX - rect.width / 2;
-        }
-
-        const spaceBelow = window.innerHeight - clientY;
-        const tooltipHeight = 150; // 估算高度
-
-        let top;
-        // 智能判断上下位置
-        // 如果是元素触发，优先显示在下方，除非下方空间不足
-        if (target instanceof HTMLElement) {
-             if (spaceBelow < tooltipHeight + 20) {
-                 // 上方显示
-                 top = targetRect.top - rect.height - 10;
-                 tooltip.classList.remove('sf-bottom');
-                 tooltip.classList.add('sf-top');
-                 tooltip.style.transformOrigin = "bottom center";
-             } else {
-                 // 下方显示
-                 top = targetRect.bottom + 10;
-                 tooltip.classList.remove('sf-top');
-                 tooltip.classList.add('sf-bottom');
-                 tooltip.style.transformOrigin = "top center";
-             }
-        } else {
-            // 鼠标触发的原有逻辑
-            if (spaceBelow < tooltipHeight + 20) {
-                top = clientY - rect.height - 10;
-                if (top < 10) top = clientY + 20;
+            // 鼠标事件触发
+            left = target.clientX - 20;
+            const spaceBelow = window.innerHeight - target.clientY;
+            if (spaceBelow < 170) {
+                top = target.clientY - rect.height - 10;
+                if (top < 10) top = target.clientY + 20;
                 else {
-                    tooltip.classList.remove('sf-bottom');
-                    tooltip.classList.add('sf-top');
+                    tooltip.className = 'sf-tooltip sf-top';
                     tooltip.style.transformOrigin = "bottom left";
                 }
             } else {
-                top = clientY + 24;
-                tooltip.classList.remove('sf-top');
-                tooltip.classList.add('sf-bottom');
+                top = target.clientY + 24;
+                tooltip.className = 'sf-tooltip sf-bottom';
                 tooltip.style.transformOrigin = "top left";
             }
+        } else {
+            return;
         }
 
         // 边界检查
