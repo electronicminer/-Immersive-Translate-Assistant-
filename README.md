@@ -8,6 +8,13 @@
   <img src="https://img.shields.io/badge/platform-Tampermonkey-orange.svg" alt="Platform">
 </p>
 
+<div align="center">
+  <!-- 访客计数徽章（去掉了首尾的短横线做 page_id，更简洁） -->
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=electronicminer.Immersive-Translate-Assistant" alt="Visitor Badge" />
+  
+  <!-- GitHub Stars 徽章（必须使用仓库的准确名称） -->
+  <img src="https://img.shields.io/github/stars/electronicminer/-Immersive-Translate-Assistant-?style=social" alt="GitHub stars" />
+</div>
 > **不仅仅是翻译，更是一次 Web 交互美学的重构。**
 > 
 > An immersive translation tool integrating high-performance **Liquid Glass** shaders and **SiliconFlow** AI models.
