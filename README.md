@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-9.65-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-9.71-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/platform-Tampermonkey-orange.svg" alt="Platform">
 </p>
@@ -40,6 +40,7 @@ v9.55 版本引入了基于 **SDF (Signed Distance Fields)** 的实时流体光�
     - **原地替换模式 (Replacement)**: 智能识别 DOM 结构，在保持网页布局的前提下替换文本。
     - **仅悬浮窗模式 (Tooltip Only)**: *[v9.55 New]* 针对代码块或复杂排版场景，仅显示悬浮翻译层，不修改原始 DOM。
 - **风格化输出**: 支持 Prompt Engineering 级别的风格切换（日常/学术/文学阅读）。
+- **停留自动翻译**: *[v9.71 New]* 开启后，选中文字后鼠标停留超过 3 秒即自动翻译，无需再点击图标。
 
 ---
 
@@ -86,7 +87,10 @@ v9.55 版本引入了基于 **SDF (Signed Distance Fields)** 的实时流体光�
 
 ## 🧩 版本更新日志 (Changelog)
 
-### v9.55 (Current)
+### v9.71 (Current)
+- **[Feat] 选中停留自动翻译**: 设置面板新增开关。开启后选中文字，鼠标停留超过 3 秒即自动翻译，悬浮图标上会显示倒计时进度环；期间鼠标移动超过阈值会重新计时，点击/按键/切换选区会取消。
+
+### v9.55
 - **[Feat] 仅悬浮窗模式**: 响应开发者社区需求，新增非侵入式翻译模式，原文保持不动，译文通过 Tooltip 展示。
 - **[Refactor] 自定义 UI 系统**: 移除了所有原生 HTML Select 元素，使用自定义的 iOS 风格组件重写，支持毛玻璃背景与平滑动画。
 - **[Fix] 样式隔离**: 增强了 CSS 权重和 Shadow DOM 策略（部分），修复了在深色模式网站下输入框文字不可见的问题。

@@ -1,8 +1,8 @@
 ﻿// ==UserScript==
 // @name        沉浸翻译助手
 // @namespace   http://tampermonkey.net/
-// @version     9.70
-// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。新增"智能语种反转"：自动检测中英文，无需手动切换目标语言。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。
+// @version     9.71
+// @description 智能划词翻译，原地替换或悬浮显示。集成高性能 Liquid Glass 液态玻璃特效。新增"智能语种反转"：自动检测中英文，无需手动切换目标语言。新增"选中停留3秒自动翻译"：选中文字后鼠标停留超过三秒自动翻译。修复部分网站面板文字遮挡问题。重写下拉菜单为原生 iOS 风格大圆角弹窗。手动翻译面板支持拖动。
 // @author      WangPan
 // @match       *://*/*
 // @connect     api.siliconflow.cn
@@ -303,7 +303,8 @@
         apiKey: GM_getValue("SF_API_KEY", ""),
         enableIcon: GM_getValue("SF_ENABLE_ICON", true),
         enableTooltip: GM_getValue("SF_ENABLE_TOOLTIP", true),
-        onlyTooltip: GM_getValue("SF_ONLY_TOOLTIP", false) // 新增功能：仅显示悬浮窗模式
+        onlyTooltip: GM_getValue("SF_ONLY_TOOLTIP", false), // 新增功能：仅显示悬浮窗模式
+        autoTranslateOnSelect: GM_getValue("SF_AUTO_TRANSLATE_ON_SELECT", false) // 新增功能：选中文字停留 3 秒自动翻译
     };
 
     // --- 🎨 样式注入 (CSS) ---
@@ -387,6 +388,17 @@
         #sf-smart-icon svg { stroke: var(--sf-primary); fill: none; width: 20px; height: 20px; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1)); z-index: 2; }
         #sf-smart-icon.sf-pop-in svg path { stroke-dasharray: 20; stroke-dashoffset: 20; animation: sf-draw-stroke 0.8s ease-out forwards; }
         #sf-smart-icon:active { transform: scale(0.92) !important; }
+
+        /* 选中停留自动翻译：倒计时进度环 */
+        @property --sf-p { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+        #sf-smart-icon.sf-auto-pending::after {
+            content: ''; position: absolute; inset: -4px; border-radius: 16px;
+            background: conic-gradient(from 0deg, var(--sf-primary) var(--sf-p, 0%), transparent var(--sf-p, 0%));
+            z-index: 1; pointer-events: none;
+            animation: sf-auto-countdown 3s linear forwards;
+            box-sizing: border-box;
+        }
+        @keyframes sf-auto-countdown { from { --sf-p: 0%; } to { --sf-p: 100%; } }
 
         /* 翻译节点样式 */
         .sf-translated-node { background-color: transparent; border-bottom: 1.5px dashed var(--sf-primary); cursor: pointer; border-radius: 4px; padding: 0 2px; display: inline; transition: all 0.2s; position: relative; -webkit-font-smoothing: antialiased; }
@@ -670,6 +682,13 @@
                     <span class="sf-label" style="margin:0">仅显示悬浮窗 (不替换)</span>
                     <label class="sf-switch">
                         <input type="checkbox" id="sf-cfg-only-tooltip" ${config.onlyTooltip ? 'checked' : ''}>
+                        <span class="sf-slider"></span>
+                    </label>
+                </div>
+                <div class="sf-setting-row">
+                    <span class="sf-label" style="margin:0">选中文字停留3秒自动翻译</span>
+                    <label class="sf-switch">
+                        <input type="checkbox" id="sf-cfg-auto-translate" ${config.autoTranslateOnSelect ? 'checked' : ''}>
                         <span class="sf-slider"></span>
                     </label>
                 </div>
@@ -1103,6 +1122,7 @@
     // --- 设置面板开关与页面切换 ---
     function toggleSettings(show) {
         if (show) {
+            clearAutoTranslate();
             document.getElementById("sf-greeting-text").innerText = getGreeting();
             settingsModal.classList.add("sf-open");
             settingsModal.classList.remove("sf-show-info");
@@ -1116,6 +1136,7 @@
             document.getElementById("sf-cfg-icon").checked = config.enableIcon;
             document.getElementById("sf-cfg-tooltip").checked = config.enableTooltip;
             document.getElementById("sf-cfg-only-tooltip").checked = config.onlyTooltip;
+            document.getElementById("sf-cfg-auto-translate").checked = config.autoTranslateOnSelect;
 
             // 重新同步下拉菜单状态
             initCustomSelects();
@@ -1138,6 +1159,8 @@
         config.enableIcon = document.getElementById("sf-cfg-icon").checked;
         config.enableTooltip = document.getElementById("sf-cfg-tooltip").checked;
         config.onlyTooltip = document.getElementById("sf-cfg-only-tooltip").checked;
+        config.autoTranslateOnSelect = document.getElementById("sf-cfg-auto-translate").checked;
+        if (!config.autoTranslateOnSelect) clearAutoTranslate(); // 关闭功能时取消进行中的倒计时
 
         GM_setValue("SF_API_KEY", config.apiKey);
         GM_setValue("SF_TARGET_LANG", config.targetLang);
@@ -1146,6 +1169,7 @@
         GM_setValue("SF_ENABLE_ICON", config.enableIcon);
         GM_setValue("SF_ENABLE_TOOLTIP", config.enableTooltip);
         GM_setValue("SF_ONLY_TOOLTIP", config.onlyTooltip);
+        GM_setValue("SF_AUTO_TRANSLATE_ON_SELECT", config.autoTranslateOnSelect);
 
         toggleSettings(false);
         showToast("配置已更新", "success");
@@ -1166,6 +1190,7 @@
     // --- 手动翻译面板逻辑 ---
     function toggleManualPanel(show) {
         if (show) {
+            clearAutoTranslate();
             manualPanel.classList.add("sf-open");
             overlay.classList.add("sf-open");
             document.getElementById("sf-manual-input").focus();
@@ -1287,12 +1312,13 @@
     });
 
     function processSelection(selection) {
-        if (!config.enableIcon) return;
-
         const text = selection.toString().trim();
-        if (text && text.length > 0) {
-            selectedText = text;
-            selectedRange = selection.getRangeAt(0);
+        if (!text || selection.rangeCount === 0) return;
+
+        selectedText = text;
+        selectedRange = selection.getRangeAt(0);
+
+        if (config.enableIcon) {
             const rect = selectedRange.getBoundingClientRect();
 
             // [Touch Adapter] 检测是否为触摸设备 (如 iPad/iPhone)
@@ -1318,20 +1344,85 @@
             void smartIcon.offsetWidth;
             smartIcon.classList.add("sf-pop-in");
         }
+
+        // 选中文字停留 3 秒自动翻译
+        startAutoTranslate(text);
     }
+
+    // --- ⏱️ 选中停留 3 秒自动翻译 ---
+    let autoTranslateTimer = null;
+    let autoTranslatePending = false;
+    let autoTranslateText = "";
+    let autoMouseStartX = 0, autoMouseStartY = 0;
+    const AUTO_MOUSE_STILL_THRESHOLD = 10; // 鼠标移动超过 10px 视为"没有停留"，重新计时
+    const lastMouse = { x: 0, y: 0 };
+
+    function startAutoTranslate(text) {
+        clearAutoTranslate();
+        if (!config.autoTranslateOnSelect || !text) return;
+
+        autoTranslateText = text;
+        autoMouseStartX = lastMouse.x;
+        autoMouseStartY = lastMouse.y;
+        autoTranslatePending = true;
+        smartIcon.classList.add("sf-auto-pending");
+
+        autoTranslateTimer = setTimeout(() => {
+            autoTranslateTimer = null;
+            if (!autoTranslatePending) return;
+            autoTranslatePending = false;
+            smartIcon.classList.remove("sf-auto-pending");
+
+            // 验证选区仍然存在且内容一致
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            if (sel.toString().trim() !== autoTranslateText) return;
+
+            // 隐藏图标并执行翻译
+            if (isIconVisible) {
+                smartIcon.style.display = "none";
+                isIconVisible = false;
+            }
+            executeTranslation();
+        }, 3000);
+    }
+
+    function clearAutoTranslate() {
+        autoTranslatePending = false;
+        if (autoTranslateTimer) {
+            clearTimeout(autoTranslateTimer);
+            autoTranslateTimer = null;
+        }
+        smartIcon.classList.remove("sf-auto-pending");
+    }
+
+    // 记录鼠标位置，用于"停留 3 秒"判定：移动超过阈值则重新计时
+    addManagedListener(document, "mousemove", (e) => {
+        lastMouse.x = e.clientX;
+        lastMouse.y = e.clientY;
+        if (autoTranslatePending && autoTranslateTimer) {
+            const dx = e.clientX - autoMouseStartX;
+            const dy = e.clientY - autoMouseStartY;
+            if (Math.abs(dx) > AUTO_MOUSE_STILL_THRESHOLD || Math.abs(dy) > AUTO_MOUSE_STILL_THRESHOLD) {
+                startAutoTranslate(autoTranslateText);
+            }
+        }
+    });
 
     addManagedListener(document, "mouseup", (e) => {
         if (isDragging || isManualDragging) return;
-        if (tooltip.contains(e.target)) return;
-        if (manualPanel.contains(e.target)) return;
-        if (activePopup && activePopup.contains(e.target)) return;
-        if (smartIcon.contains(e.target) || settingsModal.contains(e.target)) return;
+        if (tooltip.contains(e.target) || manualPanel.contains(e.target) || settingsModal.contains(e.target) ||
+            smartIcon.contains(e.target) || (activePopup && activePopup.contains(e.target))) {
+            clearAutoTranslate();
+            return;
+        }
         if (e.altKey) return;
         setTimeout(() => {
             const selection = window.getSelection();
             if (selection.toString().trim().length > 0) {
                 processSelection(selection);
             } else {
+                 clearAutoTranslate();
                  if (smartIcon.style.display !== "none" && !smartIcon.classList.contains("sf-pop-out")) {
                       smartIcon.style.display = "none";
                       isIconVisible = false;
@@ -1353,7 +1444,8 @@
             if (selection.toString().trim().length > 0) {
                 processSelection(selection);
             } else {
-                 // 如果没有选区，隐藏图标
+                 // 如果没有选区，隐藏图标并取消倒计时
+                 clearAutoTranslate();
                  if (smartIcon.style.display !== "none" && !smartIcon.classList.contains("sf-pop-out")) {
                       smartIcon.style.display = "none";
                       isIconVisible = false;
@@ -1366,9 +1458,14 @@
         if (tooltip.contains(e.target)) return;
         if (manualPanel.contains(e.target)) return;
         if (activePopup && activePopup.contains(e.target)) return;
-        if (!smartIcon.contains(e.target) && !settingsModal.contains(e.target)) {
+        if (smartIcon.contains(e.target)) {
+            clearAutoTranslate(); // 准备点击图标手动翻译，取消倒计时
+            return;
+        }
+        if (!settingsModal.contains(e.target)) {
             setTimeout(() => {
                 if (!window.getSelection().toString().trim()) {
+                    clearAutoTranslate();
                     smartIcon.style.display = "none";
                     isIconVisible = false;
                 }
@@ -1381,9 +1478,14 @@
         if (tooltip.contains(e.target)) return;
         if (manualPanel.contains(e.target)) return;
         if (activePopup && activePopup.contains(e.target)) return;
-        if (!smartIcon.contains(e.target) && !settingsModal.contains(e.target)) {
+        if (smartIcon.contains(e.target)) {
+            clearAutoTranslate(); // 准备点击图标手动翻译，取消倒计时
+            return;
+        }
+        if (!settingsModal.contains(e.target)) {
             // 在触摸开始时检查，可以更灵敏地隐藏图标
              if (!window.getSelection().toString().trim()) {
+                 clearAutoTranslate();
                  if (isIconVisible) {
                      smartIcon.style.display = "none";
                      isIconVisible = false;
@@ -1394,6 +1496,7 @@
 
     // --- 核心翻译逻辑 ---
     async function executeTranslation() {
+        clearAutoTranslate(); // 手动触发翻译时取消自动倒计时
         if (!config.apiKey) return toggleSettings(true);
         if (!selectedRange) return;
 
@@ -1422,6 +1525,7 @@
     }
 
     addManagedListener(document, "keydown", (e) => {
+        clearAutoTranslate(); // 按键视为用户已转移注意力，取消自动翻译倒计时
         if (e.altKey && (e.code === "KeyZ" || e.key === "z" || e.key === "Z")) {
             const selection = window.getSelection();
             if (selection.rangeCount > 0) {
@@ -1448,6 +1552,7 @@
     smartIcon.onclick = async (e) => {
         e.stopPropagation();
         e.preventDefault();
+        clearAutoTranslate();
         smartIcon.classList.add("sf-pop-out");
         await new Promise(r => setTimeout(r, 200));
         smartIcon.style.display = "none";
